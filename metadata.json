@@ -1,0 +1,5 @@
+{
+  "name": "Chess Graph & Analysis",
+  "description": "Interactive chess board with FEN/PGN support, annotations, and move history.",
+  "requestFramePermissions": []
+}
