@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '../components/ui/dialog';
 
 type PgnMove = { move: string; comments?: Array<{ text: string }>; nags?: string[]; variations?: PgnMove[][] };
-type PgnGame = { headers?: Record<string, string> | Array<{ name: string; value: string }>; moves?: PgnMove[]; result?: string };
+type PgnGame = { headers?: Record<string, string> | Array<{ name: string; value: string }>; introComments?: Array<{ text: string }>; moves?: PgnMove[]; result?: string };
 type ContextMenuState = { x: number; y: number; linePath: number[]; moveIndex: number; historySans: string[]; isMainLine: boolean } | null;
 type AppView = 'home' | 'analysis' | 'library';
 type NotationView = 'inline' | 'table';
@@ -85,6 +85,14 @@ const normalizeParsedGames = (games: any[] | null): PgnGame[] | null => {
   if (!games) return null;
   return games.map((game) => ({
     headers: game.headers,
+    introComments: [
+      ...(Array.isArray(game.comments_above_header)
+        ? game.comments_above_header.map((comment: any) => typeof comment === 'string' ? { text: comment } : { text: comment.text ?? String(comment) })
+        : []),
+      ...(Array.isArray(game.comments)
+        ? game.comments.map((comment: any) => typeof comment === 'string' ? { text: comment } : { text: comment.text ?? String(comment) })
+        : []),
+    ],
     moves: normalizeParsedMoves(game.moves),
     result: game.result || '*',
   }));
@@ -171,6 +179,8 @@ export default function App() {
       });
       if (headers.length) out += '\n';
     }
+    gameData.introComments?.forEach((comment) => { out += `{${comment.text}}\n`; });
+    if (gameData.introComments?.length) out += '\n';
     const walk = (moves: PgnMove[], moveNum: number, isWhite: boolean): string => {
       let text = '';
       moves.forEach((move, index) => {
@@ -191,7 +201,7 @@ export default function App() {
     return `${out} ${gameData.result || '*'}`;
   }, []);
 
-  const syncFromGame = useCallback((nextGame: Chess, nextIndex?: number) => {
+  const syncFromGame = useCallback((nextGame: Chess, nextIndex?: number, fixedHeaders?: Record<string, string>) => {
     gameRef.current = nextGame;
     const nextHistory = nextGame.history({ verbose: true });
     setFen(nextGame.fen());
@@ -199,9 +209,16 @@ export default function App() {
     setMoveHistory(nextHistory);
     setViewingMoveIndex(typeof nextIndex === 'number' ? nextIndex : nextHistory.length - 1);
     if (!isHeaderDialogOpen) {
-      setHeaderForm((prev) => ({ ...DEFAULT_HEADERS, ...prev, ...nextGame.header() }));
+      setHeaderForm((prev) => {
+        const gameHeaders = nextGame.header();
+        const parsedHeaders = parsedPgn?.[0]?.headers ? headersToRecord(parsedPgn[0].headers) : {};
+        const sourceHeaders = Object.keys(gameHeaders).length
+          ? gameHeaders
+          : fixedHeaders ?? (Object.keys(parsedHeaders).length ? parsedHeaders : prev);
+        return { ...DEFAULT_HEADERS, ...sourceHeaders };
+      });
     }
-  }, [isHeaderDialogOpen]);
+  }, [isHeaderDialogOpen, parsedPgn]);
 
   const updateGameState = useCallback((nextIndex?: number) => syncFromGame(gameRef.current, nextIndex), [syncFromGame]);
   const currentHistorySans = useMemo(() => moveHistory.map((move) => move.san), [moveHistory]);
@@ -496,7 +513,7 @@ export default function App() {
   const resetGame = () => {
     const nextGame = new Chess();
     setRootFen(nextGame.fen());
-    syncFromGame(nextGame);
+    syncFromGame(nextGame, undefined, {});
     setParsedPgn(null);
     toast.success('Tablero reiniciado');
   };
@@ -506,7 +523,7 @@ export default function App() {
     Object.entries(headerForm).forEach(([key, value]) => { if (value.trim()) nextGame.header(key, value.trim()); });
     const movetext = stripHeaders(pgn);
     if (movetext) nextGame.loadPgn(movetext);
-    syncFromGame(nextGame);
+    syncFromGame(nextGame, undefined, Object.fromEntries(Object.entries(headerForm).map(([key, value]) => [key, value.trim()]).filter(([, value]) => value)));
     if (parsedPgn?.[0]) {
       const nextParsed = cloneParsedPgn(parsedPgn);
       if (nextParsed?.[0]) {
@@ -553,13 +570,14 @@ export default function App() {
       if (isFen) {
         nextGame.load(trimmed);
         setRootFen(nextGame.fen());
-        syncFromGame(nextGame);
+        syncFromGame(nextGame, undefined, {});
         setParsedPgn(null);
       } else {
         nextGame.loadPgn(ensurePgnResult(trimmed));
         const setupFen = nextGame.header().FEN;
+        const parsedHeaders = parsed?.[0]?.headers ? headersToRecord(parsed[0].headers) : nextGame.header();
         setRootFen(typeof setupFen === 'string' && setupFen.trim() ? setupFen : new Chess().fen());
-        syncFromGame(nextGame, -1);
+        syncFromGame(nextGame, -1, parsedHeaders);
         setParsedPgn(parsed);
       }
 
@@ -684,6 +702,7 @@ export default function App() {
       tempGame.setComment(annotation);
       for (let i = undoneMoves.length - 1; i >= 0; i -= 1) if (undoneMoves[i]) tempGame.move(undoneMoves[i] as Move);
       syncFromGame(tempGame);
+      setParsedPgn((previous) => previous ? normalizeParsedGames(parse(ensurePgnResult(tempGame.pgn())) as any[]) : previous);
       setAnnotation('');
       toast.success('Anotacion anadida');
     } catch {
@@ -692,6 +711,20 @@ export default function App() {
   };
 
   const currentComment = useMemo(() => {
+    if (parsedPgn?.[0]) {
+      if (viewingMoveIndex === -1) {
+        return parsedPgn[0].introComments?.map((comment) => comment.text).filter(Boolean).join(' ') || '';
+      }
+
+      const activeSequence = currentHistorySans.slice(0, viewingMoveIndex + 1);
+      if (!activeSequence.length) return '';
+
+      const location = findMoveLocation(parsedPgn[0].moves || [], activeSequence);
+      if (!location) return '';
+
+      return location.line[location.index]?.comments?.map((comment) => comment.text).filter(Boolean).join(' ') || '';
+    }
+
     if (viewingMoveIndex === moveHistory.length - 1) return gameRef.current.getComment() || '';
     try {
       const tempGame = new Chess();
@@ -701,7 +734,7 @@ export default function App() {
     } catch {
       return '';
     }
-  }, [moveHistory.length, pgn, viewingMoveIndex]);
+  }, [currentHistorySans, findMoveLocation, moveHistory.length, parsedPgn, pgn, viewingMoveIndex]);
 
   const renderMoveButton = useCallback((
     move: PgnMove,
