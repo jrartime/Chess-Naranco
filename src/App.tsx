@@ -2,7 +2,8 @@ import React, { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState }
 import { Chess, Move, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { parse } from 'pgn-parser';
-import { Play, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Upload, Copy, FileText, MessageSquarePlus, Settings, LibraryBig, ChevronRightCircle, Home } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Play, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Upload, Copy, FileText, MessageSquare, MessageSquarePlus, Settings, LibraryBig, ChevronRightCircle, Home } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -21,6 +22,7 @@ type LibraryGame = { id: string; title: string; subtitle: string; pgn: string; h
 type PgnLibrary = { id: string; name: string; importedAt: string; games: LibraryGame[] };
 
 const LIBRARIES_STORAGE_KEY = 'chess-naranco-libraries';
+const SELECTED_LIBRARY_STORAGE_KEY = 'chess-naranco-selected-library';
 
 const DEFAULT_HEADERS: Record<string, string> = {
   Event: '?', Site: '?', Date: '????.??.??', Round: '?', White: '?', Black: '?', Result: '*',
@@ -116,6 +118,90 @@ const buildLibraryGameSubtitle = (headers: Record<string, string>) => {
   const parts = [headers.Event, headers.Site, headers.Date, headers.Result].filter((value) => value && value !== '?');
   return parts.length ? parts.join(' · ') : 'Sin metadatos adicionales';
 };
+
+function CommentIndicator({
+  comments,
+  indicatorKey,
+  variant = 'inline',
+}: {
+  comments?: Array<{ text: string }>;
+  indicatorKey: string;
+  variant?: 'inline' | 'block';
+}) {
+  const containerRef = useRef<HTMLSpanElement | null>(null);
+  const tooltipRef = useRef<HTMLSpanElement | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [openAbove, setOpenAbove] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState({ left: 12, top: 12 });
+
+  const tooltipText = useMemo(
+    () => comments?.map((comment) => comment.text).filter(Boolean).join(' ') || '',
+    [comments]
+  );
+
+  const updatePosition = useCallback(() => {
+    if (!containerRef.current || !tooltipRef.current) return;
+    const triggerRect = containerRef.current.getBoundingClientRect();
+    const tooltipHeight = tooltipRef.current.offsetHeight || 120;
+    const tooltipWidth = tooltipRef.current.offsetWidth || 260;
+    const viewportPadding = 12;
+    const nextOpenAbove = triggerRect.bottom + tooltipHeight + 12 > window.innerHeight;
+    const unclampedLeft = triggerRect.left;
+    const maxLeft = window.innerWidth - tooltipWidth - viewportPadding;
+    const left = Math.min(Math.max(unclampedLeft, viewportPadding), Math.max(viewportPadding, maxLeft));
+    const top = nextOpenAbove
+      ? Math.max(viewportPadding, triggerRect.top - tooltipHeight - 8)
+      : Math.min(window.innerHeight - tooltipHeight - viewportPadding, triggerRect.bottom + 8);
+
+    setOpenAbove(nextOpenAbove);
+    setTooltipPosition({ left, top });
+  }, []);
+
+  useEffect(() => {
+    if (!tooltipText || !isOpen) return;
+    updatePosition();
+
+    const handleViewportChange = () => updatePosition();
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
+    return () => {
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('scroll', handleViewportChange, true);
+    };
+  }, [isOpen, tooltipText, updatePosition]);
+
+  if (!tooltipText) return null;
+
+  return (
+    <>
+      <span
+        ref={containerRef}
+        className={`relative inline-flex ${variant === 'block' ? 'mt-0.5 self-start' : 'ml-1 align-middle'}`}
+        onMouseEnter={() => setIsOpen(true)}
+        onMouseLeave={() => setIsOpen(false)}
+        onFocus={() => setIsOpen(true)}
+        onBlur={() => setIsOpen(false)}
+      >
+      <span
+        tabIndex={0}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-orange-300/90 transition hover:bg-zinc-800 hover:text-orange-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
+      >
+        <MessageSquare className="h-3.5 w-3.5" />
+      </span>
+      </span>
+      {typeof document !== 'undefined' ? createPortal(
+        <span
+          ref={tooltipRef}
+          className={`pointer-events-none fixed z-[120] min-w-[220px] max-w-[320px] rounded-lg border border-orange-500/20 bg-zinc-950/95 px-3 py-2 text-xs leading-5 text-orange-100 shadow-xl transition ${isOpen ? 'opacity-100' : 'opacity-0'} ${openAbove ? 'origin-bottom-left' : 'origin-top-left'}`}
+          style={{ left: tooltipPosition.left, top: tooltipPosition.top }}
+        >
+          {`{${tooltipText}}`}
+        </span>,
+        document.body
+      ) : null}
+    </>
+  );
+}
 
 const decodePgnFile = async (file: File): Promise<string> => {
   const buffer = await file.arrayBuffer();
@@ -415,12 +501,19 @@ export default function App() {
   useEffect(() => {
     try {
       const rawLibraries = window.localStorage.getItem(LIBRARIES_STORAGE_KEY);
+      const savedSelectedLibraryId = window.localStorage.getItem(SELECTED_LIBRARY_STORAGE_KEY);
       if (!rawLibraries) return;
       const parsedLibraries = JSON.parse(rawLibraries) as PgnLibrary[];
       setLibraries(parsedLibraries);
-      if (parsedLibraries.length) setSelectedLibraryId(parsedLibraries[0].id);
+      if (parsedLibraries.length) {
+        const nextSelectedLibraryId = savedSelectedLibraryId && parsedLibraries.some((library) => library.id === savedSelectedLibraryId)
+          ? savedSelectedLibraryId
+          : parsedLibraries[0].id;
+        setSelectedLibraryId(nextSelectedLibraryId);
+      }
     } catch {
       window.localStorage.removeItem(LIBRARIES_STORAGE_KEY);
+      window.localStorage.removeItem(SELECTED_LIBRARY_STORAGE_KEY);
     }
   }, []);
 
@@ -428,12 +521,18 @@ export default function App() {
     window.localStorage.setItem(LIBRARIES_STORAGE_KEY, JSON.stringify(libraries));
     if (!libraries.length) {
       setSelectedLibraryId(null);
+      window.localStorage.removeItem(SELECTED_LIBRARY_STORAGE_KEY);
       return;
     }
     if (!selectedLibraryId || !libraries.some((library) => library.id === selectedLibraryId)) {
       setSelectedLibraryId(libraries[0].id);
     }
   }, [libraries, selectedLibraryId]);
+
+  useEffect(() => {
+    if (!selectedLibraryId) return;
+    window.localStorage.setItem(SELECTED_LIBRARY_STORAGE_KEY, selectedLibraryId);
+  }, [selectedLibraryId]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -791,6 +890,15 @@ export default function App() {
     </button>
   ), [clearLongPress, goToHistory, openContextMenu]);
 
+  const renderCommentIndicator = useCallback((
+    comments: Array<{ text: string }> | undefined,
+    key: string,
+    variant: 'inline' | 'block' = 'inline',
+  ) => {
+    if (showNotationComments || !comments?.length) return null;
+    return <CommentIndicator comments={comments} indicatorKey={key} variant={variant} />;
+  }, [showNotationComments]);
+
   const renderMoveMetaInline = useCallback((
     move: PgnMove,
     key: string,
@@ -803,6 +911,7 @@ export default function App() {
       {showNotationComments ? move.comments?.map((comment, commentIndex) => (
         <span key={`${key}-comment-${commentIndex}`} className="text-orange-300">{` {${comment.text}}`}</span>
       )) : null}
+      {renderCommentIndicator(move.comments, key)}
       {move.variations?.map((variation, variationIndex) => (
         <React.Fragment key={`${key}-variation-${variationIndex}`}>
           <span className="text-zinc-500"> (</span>
@@ -811,7 +920,7 @@ export default function App() {
         </React.Fragment>
       ))}
     </>
-  ), [showNotationComments]);
+  ), [renderCommentIndicator, showNotationComments]);
 
   const renderHistoryInline = useCallback((moves: PgnMove[], historySans: string[] = [], moveNum = 1, isWhite = true, keyPrefix = 'm', linePath: number[] = [], inVariation = false): React.ReactNode[] => {
     const nodes: React.ReactNode[] = [];
@@ -896,6 +1005,7 @@ export default function App() {
           {showNotationComments ? move.comments?.map((comment, commentIndex) => (
             <span key={`${key}-comment-${commentIndex}`} className="ml-1 text-[12px] text-orange-300/85">{`{${comment.text}}`}</span>
           )) : null}
+          {renderCommentIndicator(move.comments, key)}
         </React.Fragment>
       );
 
@@ -945,7 +1055,7 @@ export default function App() {
         {rows}
       </div>
     );
-  }, [activeHistorySans, renderMoveButton, showNotationComments]);
+  }, [activeHistorySans, renderCommentIndicator, renderMoveButton, showNotationComments]);
 
   const renderNotationTable = useCallback((moves: PgnMove[], historySans: string[] = [], moveNum = 1, isWhite = true, keyPrefix = 't', linePath: number[] = []): React.ReactNode => {
     let currentHistory = [...historySans];
@@ -977,6 +1087,7 @@ export default function App() {
           {showNotationComments ? move.comments?.map((comment, commentIndex) => (
             <div key={`${key}-comment-${commentIndex}`} className="text-[12px] leading-5 text-orange-300/90">{`{${comment.text}}`}</div>
           )) : null}
+          {renderCommentIndicator(move.comments, key, 'block')}
         </div>
       );
 
@@ -1063,7 +1174,7 @@ export default function App() {
         {rows}
       </div>
     );
-  }, [activeHistorySans, renderMoveButton, renderVariationOutline, showNotationComments]);
+  }, [activeHistorySans, renderCommentIndicator, renderMoveButton, renderVariationOutline, showNotationComments]);
 
   const notationContent = useMemo(() => {
     if (parsedPgn?.[0]?.moves?.length) {
@@ -1379,7 +1490,11 @@ export default function App() {
           <div className="flex items-center justify-center gap-4 bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 relative">
             <Button variant="ghost" size="icon" onClick={() => navigateHistory(-1)}><ChevronsLeft className="w-5 h-5" /></Button>
             <Button variant="ghost" size="icon" onClick={() => navigateHistory(viewingMoveIndex - 1)}><ChevronLeft className="w-5 h-5" /></Button>
-            <div className="px-4 py-1 bg-zinc-800 rounded-md font-mono text-sm min-w-[120px] text-center">{viewingMoveIndex === -1 ? 'Inicio' : `Mov. ${viewingMoveIndex + 1}`}</div>
+            <div className="px-4 py-1 bg-zinc-800 rounded-md font-mono text-sm min-w-[120px] text-center">
+              {viewingMoveIndex === -1
+                ? 'Inicio'
+                : `${Math.floor(viewingMoveIndex / 2) + 1}${moveHistory[viewingMoveIndex]?.color === 'b' ? '...' : '.'} ${formatSanForDisplay(moveHistory[viewingMoveIndex]?.san || '', moveHistory[viewingMoveIndex]?.color === 'w')}`}
+            </div>
             <Button variant="ghost" size="icon" onClick={() => navigateHistory(viewingMoveIndex + 1)}><ChevronRight className="w-5 h-5" /></Button>
             <Button variant="ghost" size="icon" onClick={() => navigateHistory(moveHistory.length - 1)}><ChevronsRight className="w-5 h-5" /></Button>
           </div>
