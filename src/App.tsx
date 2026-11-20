@@ -670,13 +670,14 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (currentView !== 'analysis') return;
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       if (event.key === 'ArrowRight' && viewingMoveIndex < moveHistory.length - 1) setViewingMoveIndex((value) => value + 1);
       if (event.key === 'ArrowLeft' && viewingMoveIndex > -1) setViewingMoveIndex((value) => value - 1);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [moveHistory.length, viewingMoveIndex]);
+  }, [currentView, moveHistory.length, viewingMoveIndex]);
 
   const navigateHistory = (index: number) => {
     if (index >= -1 && index < moveHistory.length) {
