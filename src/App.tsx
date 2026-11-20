@@ -48,6 +48,93 @@ const coloredSquaresFromComment = (text: string): Record<string, React.CSSProper
   return result;
 };
 
+
+type PgnArrow = { from: Square; to: Square; color: string; code: string };
+
+const PGN_ARROW_COLORS: Record<string, string> = {
+  G: '#219653',
+  R: '#e34c4c',
+  Y: '#e9ad24',
+  B: '#347de0',
+};
+
+const arrowsFromComment = (text: string): PgnArrow[] => {
+  const arrows: PgnArrow[] = [];
+  for (const match of text.matchAll(/\[%cal\s+([^\]]+)\]/gi)) {
+    for (const rawEntry of match[1].split(',')) {
+      const entry = rawEntry.trim();
+      const code = (entry[0] || '').toUpperCase();
+      const from = entry.slice(1, 3).toLowerCase();
+      const to = entry.slice(3, 5).toLowerCase();
+      if (
+        entry.length === 5 &&
+        code in PGN_ARROW_COLORS &&
+        /^[a-h][1-8]$/.test(from) &&
+        /^[a-h][1-8]$/.test(to) &&
+        from !== to
+      ) {
+        arrows.push({
+          from: from as Square,
+          to: to as Square,
+          color: PGN_ARROW_COLORS[code],
+          code,
+        });
+      }
+    }
+  }
+  return arrows;
+};
+
+const squareCenter = (square: Square) => ({
+  x: ('abcdefgh'.indexOf(square[0]) + 0.5) * 100,
+  y: (8.5 - Number(square[1])) * 100,
+});
+
+function PgnArrowOverlay({ arrows }: { arrows: PgnArrow[] }) {
+  if (!arrows.length) return null;
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+      viewBox="0 0 800 800"
+      aria-hidden="true"
+      preserveAspectRatio="none"
+    >
+      <defs>
+        {Object.entries(PGN_ARROW_COLORS).map(([code, color]) => (
+          <marker key={code} id={`pgn-arrow-tip-${code}`} viewBox="0 0 24 24"
+            markerWidth="2.3" markerHeight="2.3" refX="18" refY="12"
+            orient="auto" markerUnits="strokeWidth">
+            <path d="M 2 2 L 22 12 L 2 22 z" fill={color} />
+          </marker>
+        ))}
+      </defs>
+      {arrows.map(({ from, to, color, code }, index) => {
+        const start = squareCenter(from);
+        const end = squareCenter(to);
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const distance = Math.hypot(dx, dy);
+        const ux = dx / distance;
+        const uy = dy / distance;
+        return (
+          <line
+            key={`${code}-${from}-${to}-${index}`}
+            x1={start.x + ux * 20}
+            y1={start.y + uy * 20}
+            x2={end.x - ux * 16}
+            y2={end.y - uy * 16}
+            stroke={color}
+            strokeOpacity="0.82"
+            strokeWidth="11"
+            strokeLinecap="round"
+            markerEnd={`url(#pgn-arrow-tip-${code})`}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
 const LIBRARIES_STORAGE_KEY = 'chess-naranco-libraries';
 const SELECTED_LIBRARY_STORAGE_KEY = 'chess-naranco-selected-library';
 
@@ -862,6 +949,8 @@ export default function App() {
     }
   }, [currentHistorySans, findMoveLocation, moveHistory.length, parsedPgn, pgn, viewingMoveIndex]);
 
+  const visualArrows = useMemo(() => arrowsFromComment(currentComment), [currentComment]);
+
   const renderMoveButton = useCallback((
     move: PgnMove,
     key: string,
@@ -1502,7 +1591,8 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-7 space-y-6">
           <div className="chess-board-shell aspect-square w-full max-w-[600px] mx-auto rounded-xl overflow-hidden shadow-2xl shadow-black/50 border border-[#473122] bg-[#17130f] p-1.5">
-            <Chessboard
+            <div className="relative h-[592px] w-[592px]">
+              <Chessboard
               position={currentPositionFen}
               onPieceDrop={onDrop}
               onSquareClick={handleSquareClick}
@@ -1512,7 +1602,9 @@ export default function App() {
               customLightSquareStyle={{ backgroundColor: '#f1ddb0' }}
               customSquareStyles={customSquareStyles}
               boardWidth={592}
-            />
+              />
+              <PgnArrowOverlay arrows={visualArrows} />
+            </div>
           </div>
           <div className="flex items-center justify-center gap-4 bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 relative">
             <Button variant="ghost" size="icon" onClick={() => navigateHistory(-1)}><ChevronsLeft className="w-5 h-5" /></Button>
