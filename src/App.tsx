@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 type PgnMove = { move: string; comments?: Array<{ text: string }>; nags?: string[]; variations?: PgnMove[][] };
 type PgnGame = { headers?: Record<string, string> | Array<{ name: string; value: string }>; introComments?: Array<{ text: string }>; moves?: PgnMove[]; result?: string };
 type ContextMenuState = { x: number; y: number; linePath: number[]; moveIndex: number; historySans: string[]; isMainLine: boolean } | null;
-type AppView = 'home' | 'analysis' | 'library';
+type AppView = 'home' | 'analysis' | 'library' | 'class';
 type NotationView = 'inline' | 'table';
 type LibraryGame = { id: string; title: string; subtitle: string; pgn: string; headers: Record<string, string> };
 type PgnLibrary = { id: string; name: string; importedAt: string; games: LibraryGame[] };
@@ -357,6 +357,8 @@ export default function App() {
   const [importValue, setImportValue] = useState('');
   const [viewingMoveIndex, setViewingMoveIndex] = useState(-1);
   const [currentView, setCurrentView] = useState<AppView>('home');
+  const [classLibraryId, setClassLibraryId] = useState<string | null>(null);
+  const [classIndex, setClassIndex] = useState(0);
   const [isHeaderDialogOpen, setIsHeaderDialogOpen] = useState(false);
   const [headerForm, setHeaderForm] = useState<Record<string, string>>(DEFAULT_HEADERS);
   const [parsedPgn, setParsedPgn] = useState<PgnGame[] | null>(null);
@@ -668,13 +670,14 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (currentView !== 'analysis') return;
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       if (event.key === 'ArrowRight' && viewingMoveIndex < moveHistory.length - 1) setViewingMoveIndex((value) => value + 1);
       if (event.key === 'ArrowLeft' && viewingMoveIndex > -1) setViewingMoveIndex((value) => value - 1);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [moveHistory.length, viewingMoveIndex]);
+  }, [currentView, moveHistory.length, viewingMoveIndex]);
 
   const navigateHistory = (index: number) => {
     if (index >= -1 && index < moveHistory.length) {
@@ -1375,6 +1378,111 @@ export default function App() {
     [libraries, selectedLibraryId]
   );
 
+
+  const classLibrary = libraries.find((item) => item.id === classLibraryId);
+  const classGames = classLibrary?.games ?? [];
+  const classGame = classGames[classIndex];
+  const classroom = useMemo(() => {
+    if (!classGame) return null;
+    try {
+      const chess = new Chess();
+      chess.loadPgn(classGame.pgn);
+      const parsed = normalizeParsedGames(parse(classGame.pgn) as any[])?.[0];
+      const intro = parsed?.introComments?.map((item) => item.text).join(' ') || '';
+      const raw = intro || chess.getComment() || classGame.pgn.match(/\{([^}]*)\}/)?.[1] || '';
+      return {
+        fen: chess.fen(),
+        comment: raw,
+        title: classGame.headers.ChapterName || classGame.headers.Event || classGame.title,
+      };
+    } catch {
+      return { fen: new Chess().fen(), comment: 'PGN no válido para esta posición.', title: classGame.title };
+    }
+  }, [classGame]);
+
+  const openClass = (libraryId: string, index = 0) => {
+    setClassLibraryId(libraryId);
+    setClassIndex(index);
+    setCurrentView('class');
+  };
+
+  useEffect(() => {
+    if (currentView !== 'class') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.key === 'Escape') setCurrentView('library');
+      if (event.key === 'ArrowRight' || event.key === 'PageDown') {
+        event.preventDefault();
+        setClassIndex((index) => Math.min(classGames.length - 1, index + 1));
+      }
+      if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+        event.preventDefault();
+        setClassIndex((index) => Math.max(0, index - 1));
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [currentView, classGames.length]);
+
+  if (currentView === 'class') {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-zinc-100">
+        <Toaster position="top-center" richColors />
+        <header className="border-b border-zinc-800 bg-zinc-900 p-4">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-orange-400">MODO CLASE</p>
+              <h1 className="text-xl font-bold">{classLibrary?.name || 'Lección'}</h1>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setCurrentView('library')}>Salir al catálogo</Button>
+              <Button variant="outline" onClick={() => {
+                if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+                else document.documentElement.requestFullscreen?.().catch(() => {});
+              }}>Pantalla completa</Button>
+            </div>
+          </div>
+        </header>
+        {classroom ? (
+          <main className="mx-auto grid max-w-7xl gap-6 p-4 lg:grid-cols-2 lg:p-8">
+            <div className="mx-auto w-fit max-w-full rounded-xl border border-[#473122] bg-[#17130f] p-1.5 shadow-2xl">
+              <div className="relative h-[min(88vw,592px)] w-[min(88vw,592px)]">
+                <Chessboard
+                  position={classroom.fen}
+                  boardOrientation="white"
+                  customBoardStyle={customBoardStyle}
+                  customDarkSquareStyle={{ backgroundColor: '#bc8c64' }}
+                  customLightSquareStyle={{ backgroundColor: '#f1ddb0' }}
+                  customSquareStyles={coloredSquaresFromComment(classroom.comment)}
+                  boardWidth={592}
+                  arePiecesDraggable={false}
+                />
+                <PgnArrowOverlay arrows={arrowsFromComment(classroom.comment)} />
+              </div>
+            </div>
+            <section className="flex flex-col justify-between gap-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+              <div className="space-y-5">
+                <p className="font-semibold text-orange-400">Posición {classIndex + 1} de {classGames.length}</p>
+                <h2 className="text-3xl font-bold">{classroom.title}</h2>
+                <p className="whitespace-pre-wrap text-xl leading-relaxed text-zinc-200">{cleanVisualAnnotations(classroom.comment) || 'Sin explicación para esta posición.'}</p>
+              </div>
+              <div className="space-y-4">
+                <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
+                  <div className="h-full bg-orange-500" style={{width: `${(classIndex + 1) * 100 / classGames.length}%`}} />
+                </div>
+                <div className="flex flex-wrap justify-between gap-3">
+                  <Button variant="outline" size="lg" disabled={classIndex === 0} onClick={() => setClassIndex((index) => Math.max(0, index - 1))}><ChevronLeft className="mr-1 h-5 w-5" />Anterior</Button>
+                  <Button size="lg" disabled={classIndex >= classGames.length - 1} onClick={() => setClassIndex((index) => Math.min(classGames.length - 1, index + 1))}>Siguiente<ChevronRight className="ml-1 h-5 w-5" /></Button>
+                </div>
+                <p className="text-xs text-zinc-500">Flechas del teclado: anterior / siguiente. Esc: salir.</p>
+              </div>
+            </section>
+          </main>
+        ) : <p className="p-8">No se han encontrado posiciones en esta lección.</p>}
+      </div>
+    );
+  }
+
   if (currentView === 'home') {
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-orange-500/30">
@@ -1525,11 +1633,15 @@ export default function App() {
             </CardHeader>
             <CardContent>
               {selectedLibrary ? (
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-xs text-zinc-400">Cada partida del PGN equivale a una posición.</p>
+                  <Button disabled={!selectedLibrary.games.length} onClick={() => openClass(selectedLibrary.id)}>Iniciar clase</Button>
+                </div>
                 <ScrollArea className="h-[520px] pr-4">
                   <div className="space-y-3">
                     {selectedLibrary.games.map((game) => (
+                      <div key={game.id} className="flex items-stretch gap-2">
                       <button
-                        key={game.id}
                         type="button"
                         onClick={() => loadNotation(game.pgn, 'PGN')}
                         className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-left transition hover:border-orange-500/30 hover:bg-zinc-900"
@@ -1537,6 +1649,8 @@ export default function App() {
                         <div className="font-medium text-zinc-100">{game.title}</div>
                         <div className="mt-1 text-sm text-zinc-400">{game.subtitle}</div>
                       </button>
+                      <Button variant="outline" onClick={() => openClass(selectedLibrary.id, selectedLibrary.games.findIndex((item) => item.id === game.id))}>Presentar</Button>
+                      </div>
                     ))}
                   </div>
                 </ScrollArea>
