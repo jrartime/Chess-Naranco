@@ -31,11 +31,11 @@ const PGN_SQUARE_COLORS: Record<string, string> = {
 
 // PGN visual annotations are kept in the original PGN for round-trip export.
 const cleanVisualAnnotations = (text: string): string =>
-  text.replace(/\\[%csl\\s+[^\\]]*\\]/gi, '').replace(/\\[%cal\\s+[^\\]]*\\]/gi, '').replace(/\\s+/g, ' ').trim();
+  text.replace(/\[%csl\s+[^\]]*\]/gi, '').replace(/\[%cal\s+[^\]]*\]/gi, '').replace(/\s+/g, ' ').trim();
 
 const coloredSquaresFromComment = (text: string): Record<string, React.CSSProperties> => {
   const result: Record<string, React.CSSProperties> = {};
-  for (const match of text.matchAll(/\\[%csl\\s+([^\\]]+)\\]/gi)) {
+  for (const match of text.matchAll(/\[%csl\s+([^\]]+)\]/gi)) {
     for (const rawEntry of match[1].split(',')) {
       const entry = rawEntry.trim();
       const color = PGN_SQUARE_COLORS[entry[0]?.toUpperCase()];
