@@ -1633,6 +1633,7 @@ export default function App() {
             </CardHeader>
             <CardContent>
               {selectedLibrary ? (
+                <>
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <p className="text-xs text-zinc-400">Cada partida del PGN equivale a una posición.</p>
                   <Button disabled={!selectedLibrary.games.length} onClick={() => openClass(selectedLibrary.id)}>Iniciar clase</Button>
@@ -1654,6 +1655,7 @@ export default function App() {
                     ))}
                   </div>
                 </ScrollArea>
+                </>
               ) : (
                 <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950 p-6 text-sm leading-6 text-zinc-400">
                   Selecciona una biblioteca de la izquierda o importa un archivo PGN nuevo.
