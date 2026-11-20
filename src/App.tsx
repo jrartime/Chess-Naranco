@@ -63,7 +63,7 @@ const arrowsFromComment = (text: string): PgnArrow[] => {
   for (const match of text.matchAll(/\[%cal\s+([^\]]+)\]/gi)) {
     for (const rawEntry of match[1].split(',')) {
       const entry = rawEntry.trim();
-      const code = entry[0]?.toUpperCase();
+      const code = (entry[0] || '').toUpperCase();
       const from = entry.slice(1, 3).toLowerCase();
       const to = entry.slice(3, 5).toLowerCase();
       if (
