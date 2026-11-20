@@ -21,6 +21,33 @@ type NotationView = 'inline' | 'table';
 type LibraryGame = { id: string; title: string; subtitle: string; pgn: string; headers: Record<string, string> };
 type PgnLibrary = { id: string; name: string; importedAt: string; games: LibraryGame[] };
 
+
+const PGN_SQUARE_COLORS: Record<string, string> = {
+  G: 'rgba(60, 190, 95, 0.56)',
+  R: 'rgba(230, 65, 65, 0.56)',
+  Y: 'rgba(245, 200, 50, 0.56)',
+  B: 'rgba(60, 135, 235, 0.56)',
+};
+
+// PGN visual annotations are kept in the original PGN for round-trip export.
+const cleanVisualAnnotations = (text: string): string =>
+  text.replace(/\\[%csl\\s+[^\\]]*\\]/gi, '').replace(/\\[%cal\\s+[^\\]]*\\]/gi, '').replace(/\\s+/g, ' ').trim();
+
+const coloredSquaresFromComment = (text: string): Record<string, React.CSSProperties> => {
+  const result: Record<string, React.CSSProperties> = {};
+  for (const match of text.matchAll(/\\[%csl\\s+([^\\]]+)\\]/gi)) {
+    for (const rawEntry of match[1].split(',')) {
+      const entry = rawEntry.trim();
+      const color = PGN_SQUARE_COLORS[entry[0]?.toUpperCase()];
+      const square = entry.slice(1).toLowerCase();
+      if (color && /^[a-h][1-8]$/.test(square)) {
+        result[square] = { backgroundColor: color };
+      }
+    }
+  }
+  return result;
+};
+
 const LIBRARIES_STORAGE_KEY = 'chess-naranco-libraries';
 const SELECTED_LIBRARY_STORAGE_KEY = 'chess-naranco-selected-library';
 
@@ -135,7 +162,7 @@ function CommentIndicator({
   const [tooltipPosition, setTooltipPosition] = useState({ left: 12, top: 12 });
 
   const tooltipText = useMemo(
-    () => comments?.map((comment) => comment.text).filter(Boolean).join(' ') || '',
+    () => comments?.map((comment) => cleanVisualAnnotations(comment.text)).filter(Boolean).join(' ') || '',
     [comments]
   );
 
@@ -909,7 +936,7 @@ export default function App() {
   ) => (
     <>
       {showNotationComments ? move.comments?.map((comment, commentIndex) => (
-        <span key={`${key}-comment-${commentIndex}`} className="text-orange-300">{` {${comment.text}}`}</span>
+        <span key={`${key}-comment-${commentIndex}`} className="text-orange-300">{cleanVisualAnnotations(comment.text) ? ` {${cleanVisualAnnotations(comment.text)}}` : ''}</span>
       )) : null}
       {renderCommentIndicator(move.comments, key)}
       {move.variations?.map((variation, variationIndex) => (
@@ -1003,7 +1030,7 @@ export default function App() {
             ))}
           </span>
           {showNotationComments ? move.comments?.map((comment, commentIndex) => (
-            <span key={`${key}-comment-${commentIndex}`} className="ml-1 text-[12px] text-orange-300/85">{`{${comment.text}}`}</span>
+            <span key={`${key}-comment-${commentIndex}`} className="ml-1 text-[12px] text-orange-300/85">{cleanVisualAnnotations(comment.text) ? `{${cleanVisualAnnotations(comment.text)}}` : ''}</span>
           )) : null}
           {renderCommentIndicator(move.comments, key)}
         </React.Fragment>
@@ -1234,7 +1261,7 @@ export default function App() {
   }, [moveHistory, notationView, parsedPgn, renderHistoryInline, renderNotationTable, viewingMoveIndex]);
 
   const customSquareStyles = useMemo(() => {
-    const styles: Record<string, React.CSSProperties> = {};
+    const styles: Record<string, React.CSSProperties> = coloredSquaresFromComment(currentComment);
     if (selectedSquare) {
       styles[selectedSquare] = { backgroundColor: '#cfd764' };
     }
@@ -1246,7 +1273,7 @@ export default function App() {
       };
     });
     return styles;
-  }, [legalTargets, selectedSquare]);
+  }, [currentComment, legalTargets, selectedSquare]);
 
   const customBoardStyle = useMemo(() => ({
     borderRadius: '12px',
@@ -1571,7 +1598,7 @@ export default function App() {
           <Card className="bg-zinc-900 border-zinc-800 text-zinc-100 shadow-xl">
             <CardHeader className="pb-3"><CardTitle className="text-lg font-semibold flex items-center gap-2"><MessageSquarePlus className="w-5 h-5 text-orange-500" />Anotaciones</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              {currentComment && <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg text-sm text-orange-200 italic">"{currentComment}"</div>}
+              {cleanVisualAnnotations(currentComment) && <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg text-sm text-orange-200 italic">"{cleanVisualAnnotations(currentComment)}"</div>}
               <div className="flex gap-2"><Input placeholder="Anadir comentario al movimiento seleccionado..." className="bg-zinc-950 border-zinc-800 focus:ring-orange-500" value={annotation} onChange={(event) => setAnnotation(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addAnnotation(); }} /><Button className="bg-orange-600 hover:bg-orange-700 shrink-0" onClick={addAnnotation}>Anadir</Button></div>
             </CardContent>
           </Card>
