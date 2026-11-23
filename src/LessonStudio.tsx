@@ -57,11 +57,11 @@ function LessonBoard({diagram,showBlocks=true}:{diagram:Diagram;showBlocks?:bool
     {showBlocks&&diagram.showBlockedSquares!==false&&<BlockedSquaresOverlay squares={diagram.blockedSquares} occupied={board}/>}
   </div>;
 }
-export default function LessonStudio({onExit,onTry}:{onExit:()=>void;onTry:(d:Diagram)=>void}) {
+export default function LessonStudio({onExit,onTry,initialLesson}:{onExit:()=>void;onTry:(d:Diagram,lesson:DidacticLesson)=>void;initialLesson?:DidacticLesson|null}) {
   const [lessons,setLessons]=useState<DidacticLesson[]>(()=>{
     try{const raw=JSON.parse(localStorage.getItem(LESSON_KEY)||'[]');return Array.isArray(raw)?raw.map(validateLesson):[];}catch{return [];}
   });
-  const [draft,setDraft]=useState<DidacticLesson>(empty);
+  const [draft,setDraft]=useState<DidacticLesson>(()=>initialLesson||empty());
   const [available,setAvailable]=useState<Diagram[]>(()=>{
     try{const raw=JSON.parse(localStorage.getItem(DIAGRAM_KEY)||'[]');return Array.isArray(raw)?raw.map(validateDiagram):[];}catch{return [];}
   });
@@ -108,7 +108,7 @@ export default function LessonStudio({onExit,onTry}:{onExit:()=>void;onTry:(d:Di
           <h2 className="text-2xl font-semibold">{selected.title}</h2>
           <p className="whitespace-pre-wrap leading-relaxed text-zinc-300">{selected.description}</p>
           <button onClick={()=>setReveal(v=>!v)} className="rounded-lg border border-zinc-700 px-3 py-2 text-sm">{reveal?'Mostrar marcas':'Ocultar marcas'} de bloqueo</button>
-          {selected.active&&<button onClick={()=>onTry(selected)} className="block rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold">Probar reto interactivo</button>}
+          {selected.active&&<button onClick={()=>onTry(selected,draft)} className="block rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold">Probar reto interactivo</button>}
         </section>
       </div>:null}
       <div className="flex items-center justify-center gap-4">
