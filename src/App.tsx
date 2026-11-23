@@ -1491,7 +1491,7 @@ export default function App() {
     return <DidacticBoard initialLesson={editorPreview} onExit={() => setCurrentView('editor')} />;
   }
   if (currentView === 'editor') {
-    return <DiagramEditor onExit={() => setCurrentView('home')} onPlay={(diagram) => { setEditorPreview(diagram); setCurrentView('editor-preview'); }} />;
+    return <DiagramEditor initialDiagram={editorPreview} onExit={() => { setEditorPreview(null); setCurrentView('home'); }} onPlay={(diagram) => { setEditorPreview(diagram); setCurrentView('editor-preview'); }} />;
   }
   if (currentView === 'didactic') {
     return <DidacticBoard onExit={() => setCurrentView('home')} />;
