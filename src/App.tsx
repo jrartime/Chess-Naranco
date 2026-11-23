@@ -3,6 +3,8 @@ import { Chess, Move, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import DidacticBoard from './DidacticBoard';
 import DiagramEditor from './DiagramEditor';
+import LessonStudio from './LessonStudio';
+import type { DidacticLesson } from './LessonStudio';
 import type { Diagram } from './DiagramEditor';
 import { parse } from 'pgn-parser';
 import { createPortal } from 'react-dom';
@@ -19,7 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 type PgnMove = { move: string; comments?: Array<{ text: string }>; nags?: string[]; variations?: PgnMove[][] };
 type PgnGame = { headers?: Record<string, string> | Array<{ name: string; value: string }>; introComments?: Array<{ text: string }>; moves?: PgnMove[]; result?: string };
 type ContextMenuState = { x: number; y: number; linePath: number[]; moveIndex: number; historySans: string[]; isMainLine: boolean } | null;
-type AppView = 'home' | 'analysis' | 'library' | 'class' | 'didactic' | 'editor' | 'editor-preview';
+type AppView = 'home' | 'analysis' | 'library' | 'class' | 'didactic' | 'editor' | 'editor-preview' | 'lessons' | 'lesson-preview';
 type NotationView = 'inline' | 'table';
 type LibraryGame = { id: string; title: string; subtitle: string; pgn: string; headers: Record<string, string> };
 type PgnLibrary = { id: string; name: string; importedAt: string; games: LibraryGame[] };
@@ -361,6 +363,7 @@ export default function App() {
   const [viewingMoveIndex, setViewingMoveIndex] = useState(-1);
   const [currentView, setCurrentView] = useState<AppView>('home');
   const [editorPreview, setEditorPreview] = useState<Diagram | null>(null);
+  const [lessonDraft, setLessonDraft] = useState<DidacticLesson | null>(null);
   const [classLibraryId, setClassLibraryId] = useState<string | null>(null);
   const [classIndex, setClassIndex] = useState(0);
   const [isHeaderDialogOpen, setIsHeaderDialogOpen] = useState(false);
@@ -1487,6 +1490,12 @@ export default function App() {
     );
   }
 
+  if (currentView === 'lesson-preview' && editorPreview) {
+    return <DidacticBoard initialLesson={editorPreview} onExit={() => setCurrentView('lessons')} />;
+  }
+  if (currentView === 'lessons') {
+    return <LessonStudio initialLesson={lessonDraft} onExit={() => { setLessonDraft(null); setCurrentView('home'); }} onTry={(diagram, lesson) => { setEditorPreview(diagram); setLessonDraft(lesson); setCurrentView('lesson-preview'); }} />;
+  }
   if (currentView === 'editor-preview' && editorPreview) {
     return <DidacticBoard initialLesson={editorPreview} onExit={() => setCurrentView('editor')} />;
   }
@@ -1539,6 +1548,17 @@ export default function App() {
                 <div className="mt-8 inline-flex items-center rounded-full border border-orange-500/20 bg-orange-500/10 px-4 py-2 text-sm font-medium text-orange-200">
                   Abrir analisis
                 </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentView('lessons')}
+                className="group rounded-3xl border border-violet-500/20 bg-[linear-gradient(145deg,rgba(43,29,64,0.82),rgba(24,24,27,0.98))] p-7 text-left shadow-[0_24px_60px_rgba(0,0,0,0.28)] transition hover:-translate-y-1 hover:border-violet-400/40"
+              >
+                <div className="flex items-start justify-between gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-900 text-violet-200"><span className="text-3xl">▦</span></div><ChevronRightCircle className="h-6 w-6 text-violet-300"/></div>
+                <h2 className="mt-8 text-2xl font-semibold text-zinc-50">Lecciones didácticas</h2>
+                <p className="mt-3 text-sm leading-6 text-zinc-400">Organiza diagramas en una secuencia y preséntalos en Modo Clase con instrucciones, flechas y casillas bloqueadas.</p>
+                <div className="mt-8 inline-flex items-center rounded-full border border-violet-500/20 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-200">Crear lección</div>
               </button>
 
               <button
