@@ -159,6 +159,11 @@ export default function DidacticBoard({ onExit }: { onExit: () => void }) {
     return () => observer.disconnect();
   }, []);
   const displayFen = useMemo(() => boardToFen(board), [board]);
+  const movableSquares = useMemo(() => squares.filter((sq) => {
+    if (lesson.kind === 'maze' && board[sq] && sq !== lesson.goal) return false;
+    return checkMove(board, active, sq).ok;
+  }), [active, board, lesson.goal, lesson.kind]);
+
   const squareHighlights = useMemo(() => {
     const styles: Record<string, React.CSSProperties> = {};
     for (const square of squares) {
@@ -175,11 +180,6 @@ export default function DidacticBoard({ onExit }: { onExit: () => void }) {
     styles[active] = { ...styles[active], backgroundColor: '#bed868' };
     return styles;
   }, [active, done, hint, lesson.goal, movableSquares, trail]);
-  const movableSquares = useMemo(() => squares.filter((sq) => {
-    if (lesson.kind === 'maze' && board[sq] && sq !== lesson.goal) return false;
-    return checkMove(board, active, sq).ok;
-  }), [active, board, lesson.goal, lesson.kind]);
-
   const switchLesson = (id: string) => {
     const selected = lessons.find((item) => item.id === id) || lessons[0];
     setLessonId(selected.id);
