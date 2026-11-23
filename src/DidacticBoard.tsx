@@ -137,6 +137,23 @@ function checkMove(board: Board, from: string, to: string): { ok: boolean; expla
   return { ok: true, explanation: '' };
 }
 
+function crossesBlockedSquare(board: Board, from: string, to: string, blocked: string[]): boolean {
+  if (blocked.includes(to)) return true;
+  const piece = board[from];
+  if (!piece || piece.toLowerCase() === 'n') return false;
+  const [x1,y1] = coords(from), [x2,y2] = coords(to);
+  const dx = x2 - x1, dy = y2 - y1;
+  const straight = dx === 0 || dy === 0;
+  const diagonal = Math.abs(dx) === Math.abs(dy);
+  if (!straight && !diagonal) return false;
+  const stepX = Math.sign(dx), stepY = Math.sign(dy);
+  const steps = Math.max(Math.abs(dx),Math.abs(dy));
+  for(let i=1;i<steps;i++) {
+    if(blocked.includes(alphabet[x1+stepX*i]+(y1+stepY*i+1))) return true;
+  }
+  return false;
+}
+
 export default function DidacticBoard({ onExit, initialLesson }: { onExit: () => void; initialLesson?: Diagram | null }) {
   const availableLessons: Lesson[] = initialLesson ? [{ ...initialLesson }, ...lessons] : lessons;
   const [lessonId, setLessonId] = useState(initialLesson?.id || 'rook');
@@ -162,7 +179,7 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
   }, []);
   const displayFen = useMemo(() => boardToFen(board), [board]);
   const movableSquares = useMemo(() => squares.filter((sq) => {
-    if ((lesson.blockedSquares || []).includes(sq)) return false;
+    if (crossesBlockedSquare(board, active, sq, lesson.blockedSquares || [])) return false;
     if (lesson.kind === 'maze' && board[sq] && sq !== lesson.goal && !(lesson.captureAllowed || []).includes(sq)) return false;
     if (board[sq] && (lesson.captureAllowed || []).includes(sq)) return checkMove(board, active, sq).ok;
     return checkMove(board, active, sq).ok;
@@ -210,8 +227,8 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
       setFeedbackKind('neutral');
       return;
     }
-    if ((lesson.blockedSquares || []).includes(destination)) {
-      setFeedback('Esa casilla es un obstáculo y no se puede ocupar.');setFeedbackKind('error');return;
+    if (crossesBlockedSquare(board, active, destination, lesson.blockedSquares || [])) {
+      setFeedback('Hay una casilla bloqueada en el recorrido o en el destino. Debes evitarla.');setFeedbackKind('error');return;
     }
     const check = checkMove(board, active, destination);
     if (!check.ok) {
@@ -220,7 +237,7 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
       return;
     }
     if (lesson.kind === 'maze' && board[destination] && destination !== lesson.goal && !(lesson.captureAllowed || []).includes(destination)) {
-      setFeedback('En este laberinto, los peones son obstáculos. Debes rodearlos sin capturarlos.');
+      setFeedback('En este laberinto, esa pieza es un obstáculo que no puedes capturar. Debes rodearla.');
       setFeedbackKind('error');
       return;
     }
