@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import type { Diagram } from './DiagramEditor';
 import { Chessboard } from 'react-chessboard';
 import { ArrowLeft, RotateCcw, Lightbulb, Target, GraduationCap } from 'lucide-react';
 
 type Piece = string;
 type Board = Record<string, Piece>;
-type Lesson = { id: string; title: string; description: string; fen: string; active: string; goal?: string; kind: 'diagram' | 'maze' };
+type Lesson = { id: string; title: string; description: string; fen: string; active: string; goal?: string; kind: 'diagram' | 'maze'; goalType?: 'reach' | 'capture'; blockedSquares?: string[]; captureAllowed?: string[]; squareColors?: Diagram['squareColors']; arrows?: Diagram['arrows'] };
 
 const lessons: Lesson[] = [
   {
@@ -136,11 +137,12 @@ function checkMove(board: Board, from: string, to: string): { ok: boolean; expla
   return { ok: true, explanation: '' };
 }
 
-export default function DidacticBoard({ onExit }: { onExit: () => void }) {
-  const [lessonId, setLessonId] = useState('rook');
-  const lesson = lessons.find((item) => item.id === lessonId) || lessons[0];
-  const [board, setBoard] = useState<Board>(() => parseFenPlacement(lessons[0].fen));
-  const [active, setActive] = useState(lessons[0].active);
+export default function DidacticBoard({ onExit, initialLesson }: { onExit: () => void; initialLesson?: Diagram | null }) {
+  const availableLessons: Lesson[] = initialLesson ? [{ ...initialLesson }, ...lessons] : lessons;
+  const [lessonId, setLessonId] = useState(initialLesson?.id || 'rook');
+  const lesson = availableLessons.find((item) => item.id === lessonId) || availableLessons[0];
+  const [board, setBoard] = useState<Board>(() => parseFenPlacement(initialLesson?.fen || lessons[0].fen));
+  const [active, setActive] = useState(initialLesson?.active || lessons[0].active);
   const [numberOfMoves, setNumberOfMoves] = useState(0);
   const [feedback, setFeedback] = useState('Pulsa una casilla para mover la pieza protagonista.');
   const [feedbackKind, setFeedbackKind] = useState<'neutral' | 'error' | 'success'>('neutral');
@@ -160,12 +162,18 @@ export default function DidacticBoard({ onExit }: { onExit: () => void }) {
   }, []);
   const displayFen = useMemo(() => boardToFen(board), [board]);
   const movableSquares = useMemo(() => squares.filter((sq) => {
-    if (lesson.kind === 'maze' && board[sq] && sq !== lesson.goal) return false;
+    if ((lesson.blockedSquares || []).includes(sq)) return false;
+    if (lesson.kind === 'maze' && board[sq] && sq !== lesson.goal && !(lesson.captureAllowed || []).includes(sq)) return false;
+    if (board[sq] && (lesson.captureAllowed || []).includes(sq)) return checkMove(board, active, sq).ok;
     return checkMove(board, active, sq).ok;
   }), [active, board, lesson.goal, lesson.kind]);
 
   const squareHighlights = useMemo(() => {
     const styles: Record<string, React.CSSProperties> = {};
+    for (const [square, code] of Object.entries(lesson.squareColors || {})) {
+      const colors: Record<string,string> = { G:'#219653', R:'#e34c4c', Y:'#e9ad24', B:'#347de0' };
+      if (colors[code]) styles[square] = { backgroundColor:colors[code]+'99' };
+    }
     for (const square of squares) {
       if (hint && movableSquares.includes(square)) {
         styles[square] = { backgroundColor: 'rgba(59, 175, 89, 0.50)' };
@@ -179,9 +187,9 @@ export default function DidacticBoard({ onExit }: { onExit: () => void }) {
     }
     styles[active] = { ...styles[active], backgroundColor: '#bed868' };
     return styles;
-  }, [active, done, hint, lesson.goal, movableSquares, trail]);
+  }, [active, done, hint, lesson.goal, lesson.squareColors, movableSquares, trail]);
   const switchLesson = (id: string) => {
-    const selected = lessons.find((item) => item.id === id) || lessons[0];
+    const selected = availableLessons.find((item) => item.id === id) || availableLessons[0];
     setLessonId(selected.id);
     setBoard(parseFenPlacement(selected.fen));
     setActive(selected.active);
@@ -202,16 +210,22 @@ export default function DidacticBoard({ onExit }: { onExit: () => void }) {
       setFeedbackKind('neutral');
       return;
     }
+    if ((lesson.blockedSquares || []).includes(destination)) {
+      setFeedback('Esa casilla es un obstáculo y no se puede ocupar.');setFeedbackKind('error');return;
+    }
     const check = checkMove(board, active, destination);
     if (!check.ok) {
       setFeedback(check.explanation);
       setFeedbackKind('error');
       return;
     }
-    if (lesson.kind === 'maze' && board[destination] && destination !== lesson.goal) {
+    if (lesson.kind === 'maze' && board[destination] && destination !== lesson.goal && !(lesson.captureAllowed || []).includes(destination)) {
       setFeedback('En este laberinto, los peones son obstáculos. Debes rodearlos sin capturarlos.');
       setFeedbackKind('error');
       return;
+    }
+    if (lesson.goal && destination === lesson.goal && lesson.goalType === 'capture' && !board[destination]) {
+      setFeedback('Debes capturar una pieza en la casilla objetivo.');setFeedbackKind('error');return;
     }
     const next = { ...board };
     delete next[active];
@@ -223,7 +237,7 @@ export default function DidacticBoard({ onExit }: { onExit: () => void }) {
     if (lesson.goal && destination === lesson.goal) {
       setDone(true);
       setFeedbackKind('success');
-      setFeedback('¡Objetivo conseguido! Has capturado la torre negra en ' + (numberOfMoves + 1) + ' movimientos.');
+      setFeedback('¡Objetivo conseguido! ' + (lesson.goalType === 'capture' ? 'Has capturado la pieza objetivo' : 'Has alcanzado la casilla objetivo') + ' en ' + (numberOfMoves + 1) + ' movimientos.');
     } else {
       setFeedbackKind('success');
       setFeedback('¡Bien! Has movido la ' + pieceName(piece) + ' de ' + active + ' a ' + destination + '. Puedes volver a moverla sin alternar turnos.');
@@ -243,13 +257,13 @@ export default function DidacticBoard({ onExit }: { onExit: () => void }) {
       </header>
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         <div className="flex flex-wrap gap-2" aria-label="Ejemplos didácticos">
-          {lessons.map((item) => (
+          {availableLessons.map((item) => (
             <button type="button" key={item.id} onClick={() => switchLesson(item.id)} className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${item.id === lesson.id ? 'border-emerald-500 bg-emerald-500/15 text-emerald-200' : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-zinc-500'}`}>{item.title}</button>
           ))}
         </div>
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,600px)_minmax(260px,1fr)]">
           <div className="space-y-3">
-            <div ref={boardContainerRef} className="w-full max-w-[592px] overflow-hidden rounded-xl border-[6px] border-[#473122] shadow-2xl">
+            <div ref={boardContainerRef} className="relative w-full max-w-[592px] overflow-hidden rounded-xl border-[6px] border-[#473122] shadow-2xl">
               <Chessboard
                 position={displayFen}
                 boardOrientation="white"
@@ -260,6 +274,10 @@ export default function DidacticBoard({ onExit }: { onExit: () => void }) {
                 customLightSquareStyle={{ backgroundColor: '#f1ddb0' }}
                 customSquareStyles={squareHighlights}
               />
+              <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 800 800" preserveAspectRatio="none" aria-hidden="true">
+                <defs><marker id="didactic-arrow-tip" viewBox="0 0 24 24" markerWidth="2.3" markerHeight="2.3" refX="18" refY="12" orient="auto" markerUnits="strokeWidth"><path d="M 2 2 L 22 12 L 2 22 z" fill="context-stroke"/></marker></defs>
+                {(lesson.arrows || []).map((arrow, index) => { const x1 = (alphabet.indexOf(arrow.from[0]) + .5)*100, y1=(8.5-Number(arrow.from[1]))*100, x2=(alphabet.indexOf(arrow.to[0])+.5)*100, y2=(8.5-Number(arrow.to[1]))*100; return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke={({G:'#219653',R:'#e34c4c',Y:'#e9ad24',B:'#347de0'} as Record<string,string>)[arrow.color]} strokeWidth="11" strokeLinecap="round" markerEnd="url(#didactic-arrow-tip)"/>; })}
+              </svg>
             </div>
             <p className="text-center text-xs text-zinc-500">Pulsar la casilla de destino. No hay alternancia de turnos ni reyes obligatorios.</p>
           </div>
