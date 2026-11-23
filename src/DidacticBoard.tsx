@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Chessboard } from 'react-chessboard';
 import { ArrowLeft, RotateCcw, Lightbulb, Target, GraduationCap } from 'lucide-react';
 
 type Piece = string;
@@ -39,6 +40,30 @@ const symbols: Record<string, string> = {
 };
 const alphabet = 'abcdefgh';
 const squares = Array.from({ length: 64 }, (_, index) => alphabet[index % 8] + (8 - Math.floor(index / 8)));
+
+// The pedagogical board intentionally accepts positions without kings.
+// This FEN is only a piece-placement description for the visual renderer;
+// all move validation remains in checkMove, independent of chess.js.
+function boardToFen(board: Board): string {
+  const ranks: string[] = [];
+  for (let rank = 8; rank >= 1; rank -= 1) {
+    let empty = 0;
+    let row = '';
+    for (const file of alphabet) {
+      const piece = board[file + rank];
+      if (!piece) {
+        empty += 1;
+      } else {
+        if (empty) row += String(empty);
+        row += piece;
+        empty = 0;
+      }
+    }
+    if (empty) row += String(empty);
+    ranks.push(row);
+  }
+  return ranks.join('/') + ' w - - 0 1';
+}
 
 function parseFenPlacement(fen: string): Board {
   const board: Board = {};
@@ -122,6 +147,34 @@ export default function DidacticBoard({ onExit }: { onExit: () => void }) {
   const [hint, setHint] = useState(false);
   const [done, setDone] = useState(false);
   const [trail, setTrail] = useState<string[]>([]);
+  const boardContainerRef = useRef<HTMLDivElement | null>(null);
+  const [boardWidth, setBoardWidth] = useState(560);
+  useEffect(() => {
+    const container = boardContainerRef.current;
+    if (!container) return;
+    const updateWidth = () => setBoardWidth(Math.max(1, Math.round(container.clientWidth)));
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+  const displayFen = useMemo(() => boardToFen(board), [board]);
+  const squareHighlights = useMemo(() => {
+    const styles: Record<string, React.CSSProperties> = {};
+    for (const square of squares) {
+      if (hint && movableSquares.includes(square)) {
+        styles[square] = { backgroundColor: 'rgba(59, 175, 89, 0.50)' };
+      }
+      if (trail.includes(square)) {
+        styles[square] = { ...styles[square], boxShadow: 'inset 0 0 0 3px rgba(20, 110, 58, 0.28)' };
+      }
+    }
+    if (lesson.goal && !done) {
+      styles[lesson.goal] = { ...styles[lesson.goal], boxShadow: 'inset 0 0 0 4px rgba(245, 158, 11, 0.95)' };
+    }
+    styles[active] = { ...styles[active], backgroundColor: '#bed868' };
+    return styles;
+  }, [active, done, hint, lesson.goal, movableSquares, trail]);
   const movableSquares = useMemo(() => squares.filter((sq) => {
     if (lesson.kind === 'maze' && board[sq] && sq !== lesson.goal) return false;
     return checkMove(board, active, sq).ok;
@@ -196,33 +249,17 @@ export default function DidacticBoard({ onExit }: { onExit: () => void }) {
         </div>
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,600px)_minmax(260px,1fr)]">
           <div className="space-y-3">
-            <div className="w-full overflow-hidden rounded-xl border-[6px] border-[#473122] shadow-2xl">
-              <div className="grid aspect-square w-full grid-cols-8" role="group" aria-label="Tablero didáctico de ajedrez">
-                {squares.map((square, index) => {
-                  const piece = board[square];
-                  const dark = (Math.floor(index / 8) + index % 8) % 2 === 1;
-                  const current = active === square;
-                  const showHint = hint && movableSquares.includes(square);
-                  const isGoal = lesson.goal === square && !done;
-                  return (
-                    <button
-                      key={square}
-                      type="button"
-                      onClick={() => onSquare(square)}
-                      aria-label={square + (piece ? ', ' + pieceName(piece) : '')}
-                      title={square}
-                      className="relative flex aspect-square items-center justify-center p-0 transition hover:brightness-110"
-                      style={{ background: current ? '#bed868' : showHint ? (dark ? '#639a5b' : '#a3cb7b') : dark ? '#bc8c64' : '#f1ddb0' }}
-                    >
-                      {isGoal && <span className="pointer-events-none absolute inset-1 rounded-sm border-[3px] border-amber-500"/>}
-                      {trail.includes(square) && !current && <span className="pointer-events-none absolute h-2 w-2 rounded-full bg-emerald-900/50"/>}
-                      {piece && <span aria-hidden="true" className={`pointer-events-none select-none text-[clamp(22px,6vw,54px)] leading-none ${isWhite(piece) ? 'text-white' : 'text-zinc-900'}`} style={isWhite(piece) ? { textShadow: '0 1px 2px #111, 1px 0 1px #111, -1px 0 1px #111' } : {}}>{symbols[piece]}</span>}
-                      {index >= 56 && <span className="pointer-events-none absolute bottom-0 right-1 text-[9px] font-bold text-zinc-900/70">{square[0]}</span>}
-                      {index % 8 === 0 && <span className="pointer-events-none absolute left-1 top-0 text-[9px] font-bold text-zinc-900/70">{square[1]}</span>}
-                    </button>
-                  );
-                })}
-              </div>
+            <div ref={boardContainerRef} className="w-full max-w-[592px] overflow-hidden rounded-xl border-[6px] border-[#473122] shadow-2xl">
+              <Chessboard
+                position={displayFen}
+                boardOrientation="white"
+                boardWidth={boardWidth}
+                arePiecesDraggable={false}
+                onSquareClick={(square) => onSquare(square)}
+                customDarkSquareStyle={{ backgroundColor: '#bc8c64' }}
+                customLightSquareStyle={{ backgroundColor: '#f1ddb0' }}
+                customSquareStyles={squareHighlights}
+              />
             </div>
             <p className="text-center text-xs text-zinc-500">Pulsar la casilla de destino. No hay alternancia de turnos ni reyes obligatorios.</p>
           </div>
