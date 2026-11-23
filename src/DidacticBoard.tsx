@@ -5,7 +5,7 @@ import { ArrowLeft, RotateCcw, Lightbulb, Target, GraduationCap } from 'lucide-r
 
 type Piece = string;
 type Board = Record<string, Piece>;
-type Lesson = { id: string; title: string; description: string; fen: string; active: string; goal?: string; kind: 'diagram' | 'maze'; goalType?: 'reach' | 'capture'; blockedSquares?: string[]; captureAllowed?: string[]; squareColors?: Diagram['squareColors']; arrows?: Diagram['arrows'] };
+type Lesson = { id: string; title: string; description: string; fen: string; active: string; goal?: string; kind: 'diagram' | 'maze'; goalType?: 'reach' | 'capture'; blockedSquares?: string[]; showBlockedSquares?: boolean; captureAllowed?: string[]; squareColors?: Diagram['squareColors']; arrows?: Diagram['arrows'] };
 
 const lessons: Lesson[] = [
   {
@@ -199,12 +199,18 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
         styles[square] = { ...styles[square], boxShadow: 'inset 0 0 0 3px rgba(20, 110, 58, 0.28)' };
       }
     }
+    // Hidden blocks remain active in move validation and hints; only the border changes.
+    if (lesson.showBlockedSquares !== false) {
+      for (const square of lesson.blockedSquares || []) {
+        styles[square] = { ...styles[square], boxShadow: 'inset 0 0 0 4px #ef4444' };
+      }
+    }
     if (lesson.goal && !done) {
       styles[lesson.goal] = { ...styles[lesson.goal], boxShadow: 'inset 0 0 0 4px rgba(245, 158, 11, 0.95)' };
     }
     styles[active] = { ...styles[active], backgroundColor: '#bed868' };
     return styles;
-  }, [active, done, hint, lesson.goal, lesson.squareColors, movableSquares, trail]);
+  }, [active, done, hint, lesson.goal, lesson.squareColors, lesson.showBlockedSquares, lesson.blockedSquares, movableSquares, trail]);
   const switchLesson = (id: string) => {
     const selected = availableLessons.find((item) => item.id === id) || availableLessons[0];
     setLessonId(selected.id);
