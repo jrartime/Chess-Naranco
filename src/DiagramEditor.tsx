@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Chessboard } from 'react-chessboard';
+import BlockedSquaresOverlay from './BlockedSquaresOverlay';
 import { ArrowLeft, Save, Download, Upload, RotateCcw, Play, Trash2, Copy, Plus, Undo2 } from 'lucide-react';
 
 export type SquareMark = 'G' | 'R' | 'Y' | 'B';
@@ -129,7 +130,6 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
   const highlights=useMemo(()=>{
     const s:Record<string,React.CSSProperties>={};
     Object.entries(diagram.squareColors).forEach(([sq,c])=>{s[sq]={backgroundColor:colors[c]+'99'};});
-    diagram.blockedSquares.forEach(sq=>{s[sq]={...s[sq],boxShadow:'inset 0 0 0 4px #ef4444'};});
     diagram.captureAllowed.forEach(sq=>{s[sq]={...s[sq],boxShadow:'inset 0 0 0 4px #38bdf8'};});
     if(diagram.goal)s[diagram.goal]={...s[diagram.goal],boxShadow:'inset 0 0 0 5px #f59e0b'};
     if(diagram.active)s[diagram.active]={...s[diagram.active],backgroundColor:'#bed868'};
@@ -185,9 +185,10 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
       <section className="min-w-0 space-y-3"><div ref={boardRef} className="relative mx-auto w-full max-w-[600px] rounded-xl border-[6px] border-[#473122] shadow-2xl">
         <Chessboard position={diagram.fen+' w - - 0 1'} boardOrientation="white" boardWidth={width} arePiecesDraggable={false} onSquareClick={clickSquare}
           customDarkSquareStyle={{backgroundColor:'#bc8c64'}} customLightSquareStyle={{backgroundColor:'#f1ddb0'}} customSquareStyles={highlights}/>
-        <ArrowOverlay arrows={diagram.arrows}/></div>
+        <ArrowOverlay arrows={diagram.arrows}/>
+        <BlockedSquaresOverlay squares={diagram.blockedSquares} occupied={board}/></div>
         <p role="status" className="min-h-10 rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-sm text-zinc-300">{message} {source?'Origen: '+source+'. Selecciona destino.':''}</p>
-        <p className="text-center text-xs text-zinc-500">Verde: protagonista · Naranja: objetivo · Borde rojo: casilla bloqueada · Borde azul: pieza capturable. Una flecha se quita volviéndola a dibujar con el mismo color.</p>
+        <p className="text-center text-xs text-zinc-500">Verde: protagonista · Naranja: objetivo · X roja: casilla bloqueada · Borde azul: pieza capturable. Una flecha se quita volviéndola a dibujar con el mismo color.</p>
       </section>
       <aside className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
         <h2 className="font-semibold">Preparar el ejercicio</h2>
@@ -197,7 +198,7 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
         <label className="block text-xs text-zinc-400">Objetivo<select className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100" value={diagram.goalType} onChange={e=>setDiagram(old=>({...old,goalType:e.target.value as Diagram['goalType']}))}><option value="reach">Alcanzar casilla</option><option value="capture">Capturar pieza</option></select></label>
         <label className="flex items-start gap-3 rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-sm text-zinc-200">
           <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-500" checked={diagram.showBlockedSquares} onChange={e=>setDiagram(old=>({...old,showBlockedSquares:e.target.checked}))}/>
-          <span><strong>Mostrar casillas bloqueadas al alumnado</strong><span className="mt-1 block text-xs leading-relaxed text-zinc-400">En el editor siempre se marcan en rojo. Si desactivas esta opción, en «Probar ejercicio» estarán ocultas, pero seguirán prohibidas y se explicará el error al intentar ocuparlas o atravesarlas.</span></span>
+          <span><strong>Mostrar casillas bloqueadas al alumnado</strong><span className="mt-1 block text-xs leading-relaxed text-zinc-400">En el editor siempre se identifican con una X. Si desactivas esta opción, en «Probar ejercicio» estarán ocultas, pero seguirán prohibidas y se explicará el error al intentar ocuparlas o atravesarlas.</span></span>
         </label>
         <div className="rounded-lg bg-zinc-950 p-3 text-xs text-zinc-300"><p>Protagonista: <strong>{diagram.active||'sin asignar'}</strong></p><p>Destino: <strong>{diagram.goal||'sin asignar'}</strong></p><p>Obstáculos: {diagram.blockedSquares.length} · Capturables: {diagram.captureAllowed.length}</p></div>
         <button onClick={play} className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-3 py-3 text-sm font-bold hover:bg-orange-700"><Play size={17}/> Probar ejercicio</button>
