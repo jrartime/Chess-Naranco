@@ -95,7 +95,15 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
   const update=(next: Diagram)=>{setUndo(old=>[...old.slice(-29),diagram]);setDiagram(next);};
   const changeBoard=(next: Board)=>update({...diagram,fen:boardToPlacement(next)});
   const clickSquare=(square: string)=>{
-    if (tool==='place'){changeBoard({...board,[square]:piece});setSource(null);return;}
+    if (tool==='place'){
+      const next={...board};
+      const removing=next[square]===piece;
+      if(removing) delete next[square]; else next[square]=piece;
+      update({...diagram,fen:boardToPlacement(next),
+        active:removing && diagram.active===square?'':diagram.active,
+        captureAllowed:removing?diagram.captureAllowed.filter(s=>s!==square):diagram.captureAllowed});
+      setSource(null);return;
+    }
     if (tool==='erase'){const next={...board};delete next[square];update({...diagram,fen:boardToPlacement(next),active:diagram.active===square?'':diagram.active,goal:diagram.goal===square?undefined:diagram.goal,blockedSquares:diagram.blockedSquares.filter(s=>s!==square),captureAllowed:diagram.captureAllowed.filter(s=>s!==square)});return;}
     if (tool==='move'){if (!source){if(board[square])setSource(square);return;}
       const next={...board};if(source!==square){next[square]=next[source];delete next[source];}
@@ -104,7 +112,18 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
     if (tool==='arrow'){if(!source){setSource(square);return;}if(source!==square){const matches=diagram.arrows.some(a=>a.from===source&&a.to===square&&a.color===color);update({...diagram,arrows:matches?diagram.arrows.filter(a=>!(a.from===source&&a.to===square&&a.color===color)):[...diagram.arrows,{from:source,to:square,color}]});}setSource(null);return;}
     if (tool==='active'){if(board[square])update({...diagram,active:square});else setMessage('Selecciona una casilla que contenga una pieza.');return;}
     if (tool==='goal'){update({...diagram,goal:square});return;}
-    if (tool==='block' || tool==='capture'){const key=tool==='block'?'blockedSquares':'captureAllowed';const other=tool==='block'?'captureAllowed':'blockedSquares';const values=diagram[key].includes(square)?diagram[key].filter(s=>s!==square):[...diagram[key],square];update({...diagram,[key]:values,[other]:diagram[other].filter(s=>s!==square)});return;}
+    if (tool==='block' || tool==='capture'){
+      if(tool==='capture' && !board[square]) {setMessage('Primero coloca una pieza en esa casilla. Solo una pieza puede marcarse como capturable.');return;}
+      if(tool==='capture' && diagram.active && board[diagram.active] && (board[square]===board[square].toUpperCase())===(board[diagram.active]===board[diagram.active].toUpperCase())){
+        setMessage('La pieza capturable debe ser del color contrario al de la protagonista.');return;
+      }
+      const key=tool==='block'?'blockedSquares':'captureAllowed';
+      const other=tool==='block'?'captureAllowed':'blockedSquares';
+      const values=diagram[key].includes(square)?diagram[key].filter(s=>s!==square):[...diagram[key],square];
+      update({...diagram,[key]:values,[other]:diagram[other].filter(s=>s!==square)});
+      setMessage(tool==='block'?'Obstáculo: casilla prohibida. Púlsala otra vez para quitar la marca.':'Capturable: pieza que se permite capturar en el laberinto. Púlsala otra vez para quitar la marca.');
+      return;
+    }
   };
   const highlights=useMemo(()=>{
     const s:Record<string,React.CSSProperties>={};
@@ -130,7 +149,18 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
     if (diagram.kind === 'maze' && diagram.goalType === 'capture' && diagram.goal && !board[diagram.goal]) { setMessage('Para un objetivo de captura, coloca una pieza en la casilla de destino.'); return; }
     onPlay({...diagram});
   };
-  const tools: Array<[Tool,string]>=[['place','Colocar'],['move','Mover'],['erase','Borrar'],['color','Colorear'],['arrow','Flecha'],['active','Protagonista'],['goal','Objetivo'],['block','Obstáculo'],['capture','Capturable']];
+  const help: Record<Tool,string> = {
+    place:'Colocar: pulsa una casilla para poner la pieza elegida. Si ya tiene esa misma pieza, se elimina.',
+    move:'Mover: pulsa una pieza y después su destino, sin aplicar reglas de ajedrez.',
+    erase:'Borrar: elimina la pieza de una casilla.',
+    color:'Colorear: elige verde, rojo, amarillo o azul y pulsa la casilla; repite para quitarlo.',
+    arrow:'Flecha: pulsa origen y destino. Repite la misma flecha y color para quitarla.',
+    active:'Protagonista: señala la pieza que podrá mover el alumno durante el ejercicio.',
+    goal:'Objetivo: señala la casilla que hay que alcanzar o la pieza que hay que capturar.',
+    block:'Bloquear: marca en rojo una casilla prohibida, aunque esté vacía. La protagonista no podrá entrar en ella. Repite para desbloquear.',
+    capture:'Permitir captura: marca en azul una pieza rival que SÍ podrá capturarse en un laberinto. Las demás piezas solo obstaculizan el paso. Repite para quitar el permiso.'
+  };
+  const tools: Array<[Tool,string]>=[['place','Colocar'],['move','Mover'],['erase','Borrar'],['color','Colorear'],['arrow','Flecha'],['active','Protagonista'],['goal','Objetivo'],['block','Bloquear'],['capture','Permitir captura']];
   return <div className="min-h-screen bg-zinc-950 text-zinc-100">
     <header className="border-b border-zinc-800 bg-zinc-900/60"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4">
       <div><p className="text-xs font-semibold uppercase tracking-widest text-emerald-400">Chess-Naranco · Autoría didáctica</p><h1 className="text-xl font-bold">Editor visual de diagramas</h1></div>
@@ -143,6 +173,7 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
     <main className="mx-auto grid max-w-7xl gap-5 px-4 py-6 lg:grid-cols-[220px_minmax(320px,1fr)_300px]">
       <aside className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
         <h2 className="font-semibold">Herramientas</h2><div className="grid grid-cols-2 gap-2">{tools.map(([id,label])=><button key={id} type="button" onClick={()=>{setTool(id);setSource(null);}} className={'rounded-lg border px-2 py-2 text-xs '+(tool===id?'border-emerald-500 bg-emerald-500/20 text-emerald-200':'border-zinc-700 bg-zinc-950 text-zinc-300')}>{label}</button>)}</div>
+        <p className="rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-300" aria-live="polite">{help[tool]}</p>
         <h3 className="text-sm font-semibold">Blancas</h3><div className="grid grid-cols-6 gap-1">{codes.slice(0,6).map(p=><button key={p} onClick={()=>{setTool('place');setPiece(p);setSource(null);}} title={p} className={'rounded border text-2xl '+(tool==='place'&&piece===p?'border-emerald-400 bg-emerald-900':'border-zinc-700 bg-zinc-800')}>{glyphs[p]}</button>)}</div>
         <h3 className="text-sm font-semibold">Negras</h3><div className="grid grid-cols-6 gap-1">{codes.slice(6).map(p=><button key={p} onClick={()=>{setTool('place');setPiece(p);setSource(null);}} title={p} className={'rounded border text-2xl '+(tool==='place'&&piece===p?'border-emerald-400 bg-emerald-900':'border-zinc-700 bg-zinc-800')}>{glyphs[p]}</button>)}</div>
         <h3 className="text-sm font-semibold">Color</h3><div className="flex gap-2">{(Object.keys(colors) as SquareMark[]).map(c=><button key={c} aria-label={'Color '+c} onClick={()=>{setColor(c);setTool('color');setSource(null);}} className={'h-8 w-8 rounded-full border-2 '+(color===c?'border-white':'border-transparent')} style={{backgroundColor:colors[c]}}/>)}</div>
@@ -155,7 +186,7 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
           customDarkSquareStyle={{backgroundColor:'#bc8c64'}} customLightSquareStyle={{backgroundColor:'#f1ddb0'}} customSquareStyles={highlights}/>
         <ArrowOverlay arrows={diagram.arrows}/></div>
         <p role="status" className="min-h-10 rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-sm text-zinc-300">{message} {source?'Origen: '+source+'. Selecciona destino.':''}</p>
-        <p className="text-center text-xs text-zinc-500">Verde: protagonista · Naranja: objetivo · Rojo: obstáculo · Azul: capturable. Una flecha se quita volviéndola a dibujar con el mismo color.</p>
+        <p className="text-center text-xs text-zinc-500">Verde: protagonista · Naranja: objetivo · Borde rojo: casilla bloqueada · Borde azul: pieza capturable. Una flecha se quita volviéndola a dibujar con el mismo color.</p>
       </section>
       <aside className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
         <h2 className="font-semibold">Preparar el ejercicio</h2>
