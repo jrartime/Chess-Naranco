@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Diagram } from './DiagramEditor';
 import { Chessboard } from 'react-chessboard';
+import BlockedSquaresOverlay from './BlockedSquaresOverlay';
 import { ArrowLeft, RotateCcw, Lightbulb, Target, GraduationCap } from 'lucide-react';
 
 type Piece = string;
@@ -199,12 +200,6 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
         styles[square] = { ...styles[square], boxShadow: 'inset 0 0 0 3px rgba(20, 110, 58, 0.28)' };
       }
     }
-    // Hidden blocks remain active in move validation and hints; only the border changes.
-    if (lesson.showBlockedSquares !== false) {
-      for (const square of lesson.blockedSquares || []) {
-        styles[square] = { ...styles[square], boxShadow: 'inset 0 0 0 4px #ef4444' };
-      }
-    }
     if (lesson.goal && !done) {
       styles[lesson.goal] = { ...styles[lesson.goal], boxShadow: 'inset 0 0 0 4px rgba(245, 158, 11, 0.95)' };
     }
@@ -297,6 +292,7 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
                 customLightSquareStyle={{ backgroundColor: '#f1ddb0' }}
                 customSquareStyles={squareHighlights}
               />
+              {lesson.showBlockedSquares !== false && <BlockedSquaresOverlay squares={lesson.blockedSquares || []} occupied={board} />}
               <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 800 800" preserveAspectRatio="none" aria-hidden="true">
                 <defs><marker id="didactic-arrow-tip" viewBox="0 0 24 24" markerWidth="2.3" markerHeight="2.3" refX="18" refY="12" orient="auto" markerUnits="strokeWidth"><path d="M 2 2 L 22 12 L 2 22 z" fill="context-stroke"/></marker></defs>
                 {(lesson.arrows || []).map((arrow, index) => { const x1 = (alphabet.indexOf(arrow.from[0]) + .5)*100, y1=(8.5-Number(arrow.from[1]))*100, x2=(alphabet.indexOf(arrow.to[0])+.5)*100, y2=(8.5-Number(arrow.to[1]))*100; return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke={({G:'#219653',R:'#e34c4c',Y:'#e9ad24',B:'#347de0'} as Record<string,string>)[arrow.color]} strokeWidth="11" strokeLinecap="round" markerEnd="url(#didactic-arrow-tip)"/>; })}
