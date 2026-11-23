@@ -2,6 +2,8 @@ import React, { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState }
 import { Chess, Move, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import DidacticBoard from './DidacticBoard';
+import DiagramEditor from './DiagramEditor';
+import type { Diagram } from './DiagramEditor';
 import { parse } from 'pgn-parser';
 import { createPortal } from 'react-dom';
 import { Play, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Upload, Copy, FileText, MessageSquare, MessageSquarePlus, Settings, LibraryBig, ChevronRightCircle, Home } from 'lucide-react';
@@ -17,7 +19,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 type PgnMove = { move: string; comments?: Array<{ text: string }>; nags?: string[]; variations?: PgnMove[][] };
 type PgnGame = { headers?: Record<string, string> | Array<{ name: string; value: string }>; introComments?: Array<{ text: string }>; moves?: PgnMove[]; result?: string };
 type ContextMenuState = { x: number; y: number; linePath: number[]; moveIndex: number; historySans: string[]; isMainLine: boolean } | null;
-type AppView = 'home' | 'analysis' | 'library' | 'class' | 'didactic';
+type AppView = 'home' | 'analysis' | 'library' | 'class' | 'didactic' | 'editor' | 'editor-preview';
 type NotationView = 'inline' | 'table';
 type LibraryGame = { id: string; title: string; subtitle: string; pgn: string; headers: Record<string, string> };
 type PgnLibrary = { id: string; name: string; importedAt: string; games: LibraryGame[] };
@@ -358,6 +360,7 @@ export default function App() {
   const [importValue, setImportValue] = useState('');
   const [viewingMoveIndex, setViewingMoveIndex] = useState(-1);
   const [currentView, setCurrentView] = useState<AppView>('home');
+  const [editorPreview, setEditorPreview] = useState<Diagram | null>(null);
   const [classLibraryId, setClassLibraryId] = useState<string | null>(null);
   const [classIndex, setClassIndex] = useState(0);
   const [isHeaderDialogOpen, setIsHeaderDialogOpen] = useState(false);
@@ -1484,6 +1487,12 @@ export default function App() {
     );
   }
 
+  if (currentView === 'editor-preview' && editorPreview) {
+    return <DidacticBoard initialLesson={editorPreview} onExit={() => setCurrentView('editor')} />;
+  }
+  if (currentView === 'editor') {
+    return <DiagramEditor onExit={() => setCurrentView('home')} onPlay={(diagram) => { setEditorPreview(diagram); setCurrentView('editor-preview'); }} />;
+  }
   if (currentView === 'didactic') {
     return <DidacticBoard onExit={() => setCurrentView('home')} />;
   }
@@ -1530,6 +1539,20 @@ export default function App() {
                 <div className="mt-8 inline-flex items-center rounded-full border border-orange-500/20 bg-orange-500/10 px-4 py-2 text-sm font-medium text-orange-200">
                   Abrir analisis
                 </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentView('editor')}
+                className="group rounded-3xl border border-sky-500/20 bg-[linear-gradient(145deg,rgba(16,43,55,0.82),rgba(24,24,27,0.98))] p-7 text-left shadow-[0_24px_60px_rgba(0,0,0,0.28)] transition hover:-translate-y-1 hover:border-sky-400/40"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-900 text-sky-200"><span className="text-3xl">♜</span></div>
+                  <ChevronRightCircle className="h-6 w-6 text-sky-300" />
+                </div>
+                <h2 className="mt-8 text-2xl font-semibold text-zinc-50">Editor visual</h2>
+                <p className="mt-3 text-sm leading-6 text-zinc-400">Crea posiciones sin reyes, colorea casillas, dibuja flechas y prepara retos para probarlos en el tablero didáctico.</p>
+                <div className="mt-8 inline-flex items-center rounded-full border border-sky-500/20 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-200">Abrir editor</div>
               </button>
 
               <button
