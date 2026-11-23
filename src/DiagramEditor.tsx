@@ -73,8 +73,8 @@ function ArrowOverlay({ arrows }: { arrows: DiagramArrow[] }) {
       return <line key={i} x1={p.x+dx/d*20} y1={p.y+dy/d*20} x2={q.x-dx/d*16} y2={q.y-dy/d*16} stroke={colors[a.color]} strokeOpacity=".85" strokeWidth="11" strokeLinecap="round" markerEnd={'url(#editor-tip-' + a.color + ')'}/>; })}
   </svg>;
 }
-export default function DiagramEditor({ onExit, onPlay }: { onExit: () => void; onPlay: (diagram: Diagram) => void }) {
-  const [diagram,setDiagram] = useState<Diagram>(() => ({ ...initial, id:makeId() }));
+export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onExit: () => void; onPlay: (diagram: Diagram) => void; initialDiagram?: Diagram | null }) {
+  const [diagram,setDiagram] = useState<Diagram>(() => initialDiagram ? validateDiagram(initialDiagram) : ({ ...initial, id:makeId() }));
   const [tool,setTool] = useState<Tool>('place');
   const [piece,setPiece] = useState('R');
   const [color,setColor] = useState<SquareMark>('G');
@@ -127,7 +127,7 @@ export default function DiagramEditor({ onExit, onPlay }: { onExit: () => void; 
   };
   const play=()=>{if(!diagram.active||!board[diagram.active]){setMessage('Elige primero la pieza protagonista.');return;}
     if(diagram.kind==='maze'&&!diagram.goal){setMessage('Elige primero la casilla objetivo.');return;}
-    if(diagram.goalType==='capture' && diagram.goal && (!board[diagram.goal] || board[diagram.goal].toUpperCase()===board[diagram.goal] === (board[diagram.active].toUpperCase()===board[diagram.active]))) { /* checked by learner; no king validation */ }
+    if (diagram.kind === 'maze' && diagram.goalType === 'capture' && diagram.goal && !board[diagram.goal]) { setMessage('Para un objetivo de captura, coloca una pieza en la casilla de destino.'); return; }
     onPlay({...diagram});
   };
   const tools: Array<[Tool,string]>=[['place','Colocar'],['move','Mover'],['erase','Borrar'],['color','Colorear'],['arrow','Flecha'],['active','Protagonista'],['goal','Objetivo'],['block','Obstáculo'],['capture','Capturable']];
