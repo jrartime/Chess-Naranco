@@ -1,6 +1,7 @@
 import React, { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Move, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
+import DidacticBoard from './DidacticBoard';
 import { parse } from 'pgn-parser';
 import { createPortal } from 'react-dom';
 import { Play, RotateCcw, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Upload, Copy, FileText, MessageSquare, MessageSquarePlus, Settings, LibraryBig, ChevronRightCircle, Home } from 'lucide-react';
@@ -16,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 type PgnMove = { move: string; comments?: Array<{ text: string }>; nags?: string[]; variations?: PgnMove[][] };
 type PgnGame = { headers?: Record<string, string> | Array<{ name: string; value: string }>; introComments?: Array<{ text: string }>; moves?: PgnMove[]; result?: string };
 type ContextMenuState = { x: number; y: number; linePath: number[]; moveIndex: number; historySans: string[]; isMainLine: boolean } | null;
-type AppView = 'home' | 'analysis' | 'library' | 'class';
+type AppView = 'home' | 'analysis' | 'library' | 'class' | 'didactic';
 type NotationView = 'inline' | 'table';
 type LibraryGame = { id: string; title: string; subtitle: string; pgn: string; headers: Record<string, string> };
 type PgnLibrary = { id: string; name: string; importedAt: string; games: LibraryGame[] };
@@ -1483,6 +1484,10 @@ export default function App() {
     );
   }
 
+  if (currentView === 'didactic') {
+    return <DidacticBoard onExit={() => setCurrentView('home')} />;
+  }
+
   if (currentView === 'home') {
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-orange-500/30">
@@ -1499,14 +1504,14 @@ export default function App() {
                 Chess Naranco
               </div>
               <h1 className="mt-6 max-w-3xl text-4xl font-semibold tracking-tight text-zinc-50 md:text-6xl">
-                Tu espacio para analizar partidas y construir una biblioteca de posiciones.
+                Tu espacio para analizar partidas, enseñar ajedrez y construir una biblioteca de posiciones.
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-400 md:text-lg">
                 Empieza en el tablero de analisis o prepara una coleccion de posiciones PGN organizada por criterios de estudio, apertura o tema.
               </p>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-6 md:grid-cols-3">
               <button
                 type="button"
                 onClick={() => setCurrentView('analysis')}
@@ -1524,6 +1529,26 @@ export default function App() {
                 </p>
                 <div className="mt-8 inline-flex items-center rounded-full border border-orange-500/20 bg-orange-500/10 px-4 py-2 text-sm font-medium text-orange-200">
                   Abrir analisis
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentView('didactic')}
+                className="group rounded-3xl border border-emerald-500/20 bg-[linear-gradient(145deg,rgba(14,44,33,0.82),rgba(24,24,27,0.98))] p-7 text-left shadow-[0_24px_60px_rgba(0,0,0,0.28)] transition hover:-translate-y-1 hover:border-emerald-400/40"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-800 text-emerald-200">
+                    <span className="text-3xl">♖</span>
+                  </div>
+                  <ChevronRightCircle className="h-6 w-6 text-emerald-300 transition group-hover:translate-x-1" />
+                </div>
+                <h2 className="mt-8 text-2xl font-semibold text-zinc-50">Modo didáctico</h2>
+                <p className="mt-3 text-sm leading-6 text-zinc-400">
+                  Enseña movimientos con tableros sin reyes. Prueba retos con obstáculos, varias jugadas de la misma pieza y explicaciones.
+                </p>
+                <div className="mt-8 inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200">
+                  Probar ejercicios
                 </div>
               </button>
 
