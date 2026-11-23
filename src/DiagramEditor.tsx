@@ -7,7 +7,7 @@ export type DiagramArrow = { from: string; to: string; color: SquareMark };
 export type Diagram = {
   id: string; title: string; description: string; fen: string;
   active: string; goal?: string; goalType: 'reach' | 'capture';
-  kind: 'diagram' | 'maze'; blockedSquares: string[];
+  kind: 'diagram' | 'maze'; blockedSquares: string[]; showBlockedSquares: boolean;
   captureAllowed: string[]; squareColors: Record<string, SquareMark>;
   arrows: DiagramArrow[];
 };
@@ -19,7 +19,7 @@ const codes = ['K', 'Q', 'R', 'B', 'N', 'P', 'k', 'q', 'r', 'b', 'n', 'p'];
 const glyphs: Record<string, string> = { K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙',k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟' };
 const colors: Record<SquareMark,string> = { G:'#219653',R:'#e34c4c',Y:'#e9ad24',B:'#347de0' };
 const storageKey = 'chess-naranco-diagrams-v1';
-const initial: Diagram = { id:'', title:'Nuevo diagrama', description:'', fen:'8/8/8/8/8/8/8/8', active:'', goal:undefined, goalType:'reach', kind:'diagram', blockedSquares:[], captureAllowed:[], squareColors:{}, arrows:[] };
+const initial: Diagram = { id:'', title:'Nuevo diagrama', description:'', fen:'8/8/8/8/8/8/8/8', active:'', goal:undefined, goalType:'reach', kind:'diagram', blockedSquares:[], showBlockedSquares:true, captureAllowed:[], squareColors:{}, arrows:[] };
 const makeId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(36).slice(2));
 export function fenToBoard(fen: string): Board {
   const board: Board = {}; const rows = fen.split(' ')[0].split('/');
@@ -61,6 +61,7 @@ const validateDiagram = (value: unknown): Diagram => {
     description:typeof raw.description === 'string' ? raw.description : '', fen:boardToPlacement(board),
     active, goal, goalType:raw.goalType === 'capture' ? 'capture' : 'reach',
     kind:raw.kind === 'maze' ? 'maze' : 'diagram',
+    showBlockedSquares:raw.showBlockedSquares !== false,
     blockedSquares:Array.isArray(raw.blockedSquares) ? raw.blockedSquares.filter(validateSquare) : [],
     captureAllowed:Array.isArray(raw.captureAllowed) ? raw.captureAllowed.filter(validateSquare) : [],
     squareColors:marks, arrows };
@@ -194,6 +195,10 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
         <label className="block text-xs text-zinc-400">Instrucciones<textarea rows={4} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100" value={diagram.description} onChange={e=>setDiagram(old=>({...old,description:e.target.value}))}/></label>
         <label className="block text-xs text-zinc-400">Tipo<select className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100" value={diagram.kind} onChange={e=>setDiagram(old=>({...old,kind:e.target.value as Diagram['kind']}))}><option value="diagram">Diagrama de movimientos</option><option value="maze">Reto / laberinto</option></select></label>
         <label className="block text-xs text-zinc-400">Objetivo<select className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100" value={diagram.goalType} onChange={e=>setDiagram(old=>({...old,goalType:e.target.value as Diagram['goalType']}))}><option value="reach">Alcanzar casilla</option><option value="capture">Capturar pieza</option></select></label>
+        <label className="flex items-start gap-3 rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-sm text-zinc-200">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-500" checked={diagram.showBlockedSquares} onChange={e=>setDiagram(old=>({...old,showBlockedSquares:e.target.checked}))}/>
+          <span><strong>Mostrar casillas bloqueadas al alumnado</strong><span className="mt-1 block text-xs leading-relaxed text-zinc-400">En el editor siempre se marcan en rojo. Si desactivas esta opción, en «Probar ejercicio» estarán ocultas, pero seguirán prohibidas y se explicará el error al intentar ocuparlas o atravesarlas.</span></span>
+        </label>
         <div className="rounded-lg bg-zinc-950 p-3 text-xs text-zinc-300"><p>Protagonista: <strong>{diagram.active||'sin asignar'}</strong></p><p>Destino: <strong>{diagram.goal||'sin asignar'}</strong></p><p>Obstáculos: {diagram.blockedSquares.length} · Capturables: {diagram.captureAllowed.length}</p></div>
         <button onClick={play} className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-3 py-3 text-sm font-bold hover:bg-orange-700"><Play size={17}/> Probar ejercicio</button>
         <div className="border-t border-zinc-700 pt-3"><h3 className="mb-2 text-sm font-semibold">Mis diagramas ({saved.length})</h3>
