@@ -25,6 +25,7 @@ function validateDiagram(data: unknown): Diagram {
     blockedSquares:Array.isArray(d.blockedSquares)?d.blockedSquares.filter(square):[],
     showBlockedSquares:d.showBlockedSquares!==false,
     captureAllowed:Array.isArray(d.captureAllowed)?d.captureAllowed.filter(square):[],
+    nonCapturableSquares:Array.isArray(d.nonCapturableSquares)?d.nonCapturableSquares.filter(square):[],
     squareColors,arrows};
 }
 function validateLesson(value:unknown):DidacticLesson {
@@ -49,7 +50,8 @@ function LessonBoard({diagram,showBlocks=true}:{diagram:Diagram;showBlocks?:bool
   const styles=useMemo(()=>{const data:Record<string,React.CSSProperties>={};for(const [sq,c] of Object.entries(diagram.squareColors)){data[sq]={backgroundColor:colors[c]+'99'};}
     if(diagram.active)data[diagram.active]={...data[diagram.active],backgroundColor:'#bed868'};
     if(diagram.goal)data[diagram.goal]={...data[diagram.goal],boxShadow:'inset 0 0 0 4px #f59e0b'};
-    diagram.captureAllowed.forEach(s=>data[s]={...data[s],boxShadow:'inset 0 0 0 4px #38bdf8'});return data;},[diagram]);
+    diagram.captureAllowed.forEach(s=>data[s]={...data[s],boxShadow:'inset 0 0 0 4px #38bdf8'});
+    diagram.nonCapturableSquares.forEach(s=>data[s]={...data[s],boxShadow:'inset 0 0 0 4px #a78bfa'});return data;},[diagram]);
   return <div ref={ref} className="relative mx-auto w-full max-w-[600px] overflow-hidden rounded-xl border-[6px] border-[#473122]">
     <Chessboard position={diagram.fen+' w - - 0 1'} boardWidth={width} boardOrientation="white" arePiecesDraggable={false}
       customSquareStyles={styles} customDarkSquareStyle={{backgroundColor:'#bc8c64'}} customLightSquareStyle={{backgroundColor:'#f1ddb0'}}/>
