@@ -9,18 +9,18 @@ export type Diagram = {
   id: string; title: string; description: string; fen: string;
   active: string; goal?: string; goalType: 'reach' | 'capture';
   kind: 'diagram' | 'maze'; blockedSquares: string[]; showBlockedSquares: boolean;
-  captureAllowed: string[]; squareColors: Record<string, SquareMark>;
+  captureAllowed: string[]; nonCapturableSquares: string[]; squareColors: Record<string, SquareMark>;
   arrows: DiagramArrow[];
 };
 type Board = Record<string, string>;
-type Tool = 'place' | 'move' | 'erase' | 'color' | 'arrow' | 'active' | 'goal' | 'block' | 'capture';
+type Tool = 'place' | 'move' | 'erase' | 'color' | 'arrow' | 'active' | 'goal' | 'block' | 'protect';
 const files = 'abcdefgh';
 const squares = Array.from({ length: 64 }, (_, i) => files[i % 8] + (8 - Math.floor(i / 8)));
 const codes = ['K', 'Q', 'R', 'B', 'N', 'P', 'k', 'q', 'r', 'b', 'n', 'p'];
 const glyphs: Record<string, string> = { K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙',k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟' };
 const colors: Record<SquareMark,string> = { G:'#219653',R:'#e34c4c',Y:'#e9ad24',B:'#347de0' };
 const storageKey = 'chess-naranco-diagrams-v1';
-const initial: Diagram = { id:'', title:'Nuevo diagrama', description:'', fen:'8/8/8/8/8/8/8/8', active:'', goal:undefined, goalType:'reach', kind:'diagram', blockedSquares:[], showBlockedSquares:true, captureAllowed:[], squareColors:{}, arrows:[] };
+const initial: Diagram = { id:'', title:'Nuevo diagrama', description:'', fen:'8/8/8/8/8/8/8/8', active:'', goal:undefined, goalType:'reach', kind:'diagram', blockedSquares:[], showBlockedSquares:true, captureAllowed:[], nonCapturableSquares:[], squareColors:{}, arrows:[] };
 const makeId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(36).slice(2));
 export function fenToBoard(fen: string): Board {
   const board: Board = {}; const rows = fen.split(' ')[0].split('/');
@@ -65,6 +65,7 @@ const validateDiagram = (value: unknown): Diagram => {
     showBlockedSquares:raw.showBlockedSquares !== false,
     blockedSquares:Array.isArray(raw.blockedSquares) ? raw.blockedSquares.filter(validateSquare) : [],
     captureAllowed:Array.isArray(raw.captureAllowed) ? raw.captureAllowed.filter(validateSquare) : [],
+    nonCapturableSquares:Array.isArray(raw.nonCapturableSquares) ? raw.nonCapturableSquares.filter(validateSquare) : [],
     squareColors:marks, arrows };
 };
 const center = (sq: string) => ({ x:(files.indexOf(sq[0]) + .5)*100, y:(8.5-Number(sq[1]))*100 });
@@ -103,27 +104,38 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
       if(removing) delete next[square]; else next[square]=piece;
       update({...diagram,fen:boardToPlacement(next),
         active:removing && diagram.active===square?'':diagram.active,
-        captureAllowed:removing?diagram.captureAllowed.filter(s=>s!==square):diagram.captureAllowed});
+        captureAllowed:removing?diagram.captureAllowed.filter(s=>s!==square):diagram.captureAllowed,
+        nonCapturableSquares:removing?diagram.nonCapturableSquares.filter(s=>s!==square):diagram.nonCapturableSquares});
       setSource(null);return;
     }
-    if (tool==='erase'){const next={...board};delete next[square];update({...diagram,fen:boardToPlacement(next),active:diagram.active===square?'':diagram.active,goal:diagram.goal===square?undefined:diagram.goal,blockedSquares:diagram.blockedSquares.filter(s=>s!==square),captureAllowed:diagram.captureAllowed.filter(s=>s!==square)});return;}
-    if (tool==='move'){if (!source){if(board[square])setSource(square);return;}
-      const next={...board};if(source!==square){next[square]=next[source];delete next[source];}
-      update({...diagram,fen:boardToPlacement(next),active:diagram.active===source?square:diagram.active});setSource(null);return;}
+    if (tool==='erase'){const next={...board};delete next[square];update({...diagram,fen:boardToPlacement(next),active:diagram.active===square?'':diagram.active,goal:diagram.goal===square?undefined:diagram.goal,blockedSquares:diagram.blockedSquares.filter(s=>s!==square),captureAllowed:diagram.captureAllowed.filter(s=>s!==square),nonCapturableSquares:diagram.nonCapturableSquares.filter(s=>s!==square)});return;}
+    if (tool==='move'){
+      if (!source){if(board[square])setSource(square);return;}
+      if(source===square){setSource(null);return;}
+      const next={...board};next[square]=next[source];delete next[source];
+      const transfer=(items:string[])=>[...items.filter(s=>s!==source&&s!==square),...(items.includes(source)?[square]:[])];
+      update({...diagram,fen:boardToPlacement(next),active:diagram.active===source?square:diagram.active,
+        nonCapturableSquares:transfer(diagram.nonCapturableSquares),
+        captureAllowed:transfer(diagram.captureAllowed)});
+      setSource(null);return;
+    }
     if (tool==='color'){const marks={...diagram.squareColors};if(marks[square]===color)delete marks[square];else marks[square]=color;update({...diagram,squareColors:marks});return;}
     if (tool==='arrow'){if(!source){setSource(square);return;}if(source!==square){const matches=diagram.arrows.some(a=>a.from===source&&a.to===square&&a.color===color);update({...diagram,arrows:matches?diagram.arrows.filter(a=>!(a.from===source&&a.to===square&&a.color===color)):[...diagram.arrows,{from:source,to:square,color}]});}setSource(null);return;}
     if (tool==='active'){if(board[square])update({...diagram,active:square});else setMessage('Selecciona una casilla que contenga una pieza.');return;}
     if (tool==='goal'){update({...diagram,goal:square});return;}
-    if (tool==='block' || tool==='capture'){
-      if(tool==='capture' && !board[square]) {setMessage('Primero coloca una pieza en esa casilla. Solo una pieza puede marcarse como capturable.');return;}
-      if(tool==='capture' && diagram.active && board[diagram.active] && (board[square]===board[square].toUpperCase())===(board[diagram.active]===board[diagram.active].toUpperCase())){
-        setMessage('La pieza capturable debe ser del color contrario al de la protagonista.');return;
-      }
-      const key=tool==='block'?'blockedSquares':'captureAllowed';
-      const other=tool==='block'?'captureAllowed':'blockedSquares';
-      const values=diagram[key].includes(square)?diagram[key].filter(s=>s!==square):[...diagram[key],square];
-      update({...diagram,[key]:values,[other]:diagram[other].filter(s=>s!==square)});
-      setMessage(tool==='block'?'Obstáculo: casilla prohibida. Púlsala otra vez para quitar la marca.':'Capturable: pieza que se permite capturar en el laberinto. Púlsala otra vez para quitar la marca.');
+    if (tool==='protect'){
+      if(!board[square]){setMessage('Coloca primero una pieza para marcarla como no capturable.');return;}
+      if(diagram.active===square){setMessage('La protagonista no necesita marcarse como no capturable.');return;}
+      const selected=diagram.nonCapturableSquares.includes(square);
+      update({...diagram,nonCapturableSquares:selected?diagram.nonCapturableSquares.filter(s=>s!==square):[...diagram.nonCapturableSquares,square],
+        captureAllowed:diagram.captureAllowed.filter(s=>s!==square)});
+      setMessage(selected?'Protección retirada.':'Pieza no capturable: cualquier intento de capturarla será rechazado.');
+      return;
+    }
+    if (tool==='block'){
+      const selected=diagram.blockedSquares.includes(square);
+      update({...diagram,blockedSquares:selected?diagram.blockedSquares.filter(s=>s!==square):[...diagram.blockedSquares,square]});
+      setMessage(selected?'Casilla desbloqueada.':'Casilla bloqueada. No se podrá ocupar ni atravesar.');
       return;
     }
   };
@@ -131,6 +143,7 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
     const s:Record<string,React.CSSProperties>={};
     Object.entries(diagram.squareColors).forEach(([sq,c])=>{s[sq]={backgroundColor:colors[c]+'99'};});
     diagram.captureAllowed.forEach(sq=>{s[sq]={...s[sq],boxShadow:'inset 0 0 0 4px #38bdf8'};});
+    diagram.nonCapturableSquares.forEach(sq=>{s[sq]={...s[sq],boxShadow:'inset 0 0 0 5px #a78bfa'};});
     if(diagram.goal)s[diagram.goal]={...s[diagram.goal],boxShadow:'inset 0 0 0 5px #f59e0b'};
     if(diagram.active)s[diagram.active]={...s[diagram.active],backgroundColor:'#bed868'};
     if(source)s[source]={...s[source],boxShadow:'inset 0 0 0 5px white'};
@@ -159,9 +172,9 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
     active:'Protagonista: señala la pieza que podrá mover el alumno durante el ejercicio.',
     goal:'Objetivo: señala la casilla que hay que alcanzar o la pieza que hay que capturar.',
     block:'Bloquear: marca en rojo una casilla prohibida, aunque esté vacía. La protagonista no podrá entrar en ella. Repite para desbloquear.',
-    capture:'Permitir captura: marca en azul una pieza rival que SÍ podrá capturarse en un laberinto. Las demás piezas solo obstaculizan el paso. Repite para quitar el permiso.'
+    protect:'Pieza no capturable: selecciona una pieza para protegerla de cualquier captura. Se marca en violeta. Vuelve a pulsarla para quitar la protección.'
   };
-  const tools: Array<[Tool,string]>=[['place','Colocar'],['move','Mover'],['erase','Borrar'],['color','Colorear'],['arrow','Flecha'],['active','Protagonista'],['goal','Objetivo'],['block','Bloquear'],['capture','Permitir captura']];
+  const tools: Array<[Tool,string]>=[['place','Colocar'],['move','Mover'],['erase','Borrar'],['color','Colorear'],['arrow','Flecha'],['active','Protagonista'],['goal','Objetivo'],['block','Bloquear'],['protect','Pieza no capturable']];
   return <div className="min-h-screen bg-zinc-950 text-zinc-100">
     <header className="border-b border-zinc-800 bg-zinc-900/60"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4">
       <div><p className="text-xs font-semibold uppercase tracking-widest text-emerald-400">Chess-Naranco · Autoría didáctica</p><h1 className="text-xl font-bold">Editor visual de diagramas</h1></div>
@@ -188,7 +201,7 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
         <ArrowOverlay arrows={diagram.arrows}/>
         <BlockedSquaresOverlay squares={diagram.blockedSquares} occupied={board}/></div>
         <p role="status" className="min-h-10 rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-sm text-zinc-300">{message} {source?'Origen: '+source+'. Selecciona destino.':''}</p>
-        <p className="text-center text-xs text-zinc-500">Verde: protagonista · Naranja: objetivo · X roja: casilla bloqueada · Borde azul: pieza capturable. Una flecha se quita volviéndola a dibujar con el mismo color.</p>
+        <p className="text-center text-xs text-zinc-500">Verde: protagonista · Naranja: objetivo · X roja: casilla bloqueada · Violeta: pieza no capturable. Una flecha se quita volviéndola a dibujar con el mismo color.</p>
       </section>
       <aside className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
         <h2 className="font-semibold">Preparar el ejercicio</h2>
@@ -200,7 +213,7 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
           <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-500" checked={diagram.showBlockedSquares} onChange={e=>setDiagram(old=>({...old,showBlockedSquares:e.target.checked}))}/>
           <span><strong>Mostrar casillas bloqueadas al alumnado</strong><span className="mt-1 block text-xs leading-relaxed text-zinc-400">En el editor siempre se identifican con una X. Si desactivas esta opción, en «Probar ejercicio» estarán ocultas, pero seguirán prohibidas y se explicará el error al intentar ocuparlas o atravesarlas.</span></span>
         </label>
-        <div className="rounded-lg bg-zinc-950 p-3 text-xs text-zinc-300"><p>Protagonista: <strong>{diagram.active||'sin asignar'}</strong></p><p>Destino: <strong>{diagram.goal||'sin asignar'}</strong></p><p>Obstáculos: {diagram.blockedSquares.length} · Capturables: {diagram.captureAllowed.length}</p></div>
+        <div className="rounded-lg bg-zinc-950 p-3 text-xs text-zinc-300"><p>Protagonista: <strong>{diagram.active||'sin asignar'}</strong></p><p>Destino: <strong>{diagram.goal||'sin asignar'}</strong></p><p>Casillas bloqueadas: {diagram.blockedSquares.length} · Piezas no capturables: {diagram.nonCapturableSquares.length}</p></div>
         <button onClick={play} className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-3 py-3 text-sm font-bold hover:bg-orange-700"><Play size={17}/> Probar ejercicio</button>
         <div className="border-t border-zinc-700 pt-3"><h3 className="mb-2 text-sm font-semibold">Mis diagramas ({saved.length})</h3>
         <div className="max-h-56 space-y-2 overflow-y-auto">{saved.map(d=><div key={d.id} className="flex items-center gap-2 rounded-lg bg-zinc-950 p-2"><button title="Abrir diagrama" className="min-w-0 flex-1 truncate text-left text-xs" onClick={()=>{setDiagram(d);setUndo([]);setSource(null);setMessage('Diagrama recuperado.')}}>{d.title}</button>
