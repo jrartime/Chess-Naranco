@@ -82,6 +82,7 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
   const [piece,setPiece] = useState('R');
   const [color,setColor] = useState<SquareMark>('G');
   const [source,setSource] = useState<string | null>(null);
+  const [configOpen,setConfigOpen] = useState(false);
   const [saved,setSaved] = useState<Diagram[]>(() => {
     try { const v = JSON.parse(localStorage.getItem(storageKey) || '[]'); return Array.isArray(v) ? v.map(validateDiagram) : []; } catch { return []; }
   });
@@ -89,6 +90,8 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
   const [message,setMessage] = useState('Selecciona una herramienta y pulsa el tablero.');
   const fileRef=useRef<HTMLInputElement>(null);
   const boardRef=useRef<HTMLDivElement>(null);
+  const configRef=useRef<HTMLDetailsElement>(null);
+  const openConfig=()=>{setConfigOpen(true);configRef.current?.scrollIntoView({behavior:'smooth',block:'center'});};
   const [width,setWidth]=useState(560);
   useEffect(() => { const el=boardRef.current; if (!el) return;
     const update=()=>setWidth(Math.max(1,Math.floor(el.clientWidth)));
@@ -178,7 +181,7 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
   return <div className="min-h-screen bg-zinc-950 text-zinc-100">
     <header className="border-b border-zinc-800 bg-zinc-900/60"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4">
       <div><p className="text-xs font-semibold uppercase tracking-widest text-emerald-400">Chess-Naranco · Autoría didáctica</p><h1 className="text-xl font-bold">Editor visual de diagramas</h1></div>
-      <div className="flex flex-wrap gap-2"><button className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={onExit}><ArrowLeft size={16} className="inline"/> Inicio</button>
+      <div className="flex flex-wrap gap-2"><button className="rounded-lg border border-emerald-500 bg-emerald-900/40 px-3 py-2 text-sm font-semibold text-emerald-100" onClick={openConfig}>⚙ Configuración</button><button className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={onExit}><ArrowLeft size={16} className="inline"/> Inicio</button>
       <button className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={fresh}><Plus size={16} className="inline"/> Nuevo</button>
       <button className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={()=>fileRef.current?.click()}><Upload size={16} className="inline"/> Importar</button>
       <button className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={exportJson}><Download size={16} className="inline"/> Exportar JSON</button>
@@ -204,12 +207,12 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
         <p className="text-center text-xs text-zinc-500">Verde: protagonista · Naranja: objetivo · X roja: casilla bloqueada · Violeta: pieza no capturable. Una flecha se quita volviéndola a dibujar con el mismo color.</p>
       </section>
       <aside className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-        <h2 className="font-semibold">Preparar el ejercicio</h2>
+        <div className="flex items-center justify-between gap-2"><h2 className="font-semibold">Preparar el ejercicio</h2><button type="button" onClick={openConfig} className="rounded-lg border border-emerald-600 px-2 py-1.5 text-xs font-semibold text-emerald-200">⚙ Configuración</button></div>
         <label className="block text-xs text-zinc-400">Título<input className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100" value={diagram.title} onChange={e=>setDiagram(old=>({...old,title:e.target.value}))}/></label>
         <label className="block text-xs text-zinc-400">Instrucciones<textarea rows={4} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100" value={diagram.description} onChange={e=>setDiagram(old=>({...old,description:e.target.value}))}/></label>
         <label className="block text-xs text-zinc-400">Tipo<select className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100" value={diagram.kind} onChange={e=>setDiagram(old=>({...old,kind:e.target.value as Diagram['kind']}))}><option value="diagram">Diagrama de movimientos</option><option value="maze">Reto / laberinto</option></select></label>
         <label className="block text-xs text-zinc-400">Objetivo<select className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100" value={diagram.goalType} onChange={e=>setDiagram(old=>({...old,goalType:e.target.value as Diagram['goalType']}))}><option value="reach">Alcanzar casilla</option><option value="capture">Capturar pieza</option></select></label>
-        <details className="group rounded-xl border border-zinc-700 bg-zinc-950">
+        <details ref={configRef} open={configOpen} onToggle={e=>setConfigOpen(e.currentTarget.open)} className="group rounded-xl border border-emerald-700/70 bg-zinc-950">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-sm font-semibold text-zinc-100">
             <span>⚙ Configuración del ejercicio</span>
             <span aria-hidden="true" className="text-zinc-400 transition-transform group-open:rotate-180">⌄</span>
