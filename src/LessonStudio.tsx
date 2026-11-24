@@ -26,6 +26,9 @@ function validateDiagram(data: unknown): Diagram {
     showBlockedSquares:d.showBlockedSquares!==false,
     captureAllowed:Array.isArray(d.captureAllowed)?d.captureAllowed.filter(square):[],
     nonCapturableSquares:Array.isArray(d.nonCapturableSquares)?d.nonCapturableSquares.filter(square):[],
+    enforceCheck:d.enforceCheck===true,allowCastling:d.allowCastling===true,allowEnPassant:d.allowEnPassant===true,
+    castlingRights:typeof d.castlingRights==='string'?d.castlingRights.replace(/[^KQkq]/g,''):'',
+    enPassantSquare:typeof d.enPassantSquare==='string'&&square(d.enPassantSquare)?d.enPassantSquare:'',
     squareColors,arrows};
 }
 function validateLesson(value:unknown):DidacticLesson {
