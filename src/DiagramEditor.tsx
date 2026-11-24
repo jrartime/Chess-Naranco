@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Chessboard } from 'react-chessboard';
 import BlockedSquaresOverlay from './BlockedSquaresOverlay';
+import { availableCastlingRights, possibleEpTargets } from './didacticSpecialRules';
 import { ArrowLeft, Save, Download, Upload, RotateCcw, Play, Trash2, Copy, Plus, Undo2 } from 'lucide-react';
 
 export type SquareMark = 'G' | 'R' | 'Y' | 'B';
@@ -11,6 +12,8 @@ export type Diagram = {
   kind: 'diagram' | 'maze'; blockedSquares: string[]; showBlockedSquares: boolean;
   captureAllowed: string[]; nonCapturableSquares: string[]; squareColors: Record<string, SquareMark>;
   arrows: DiagramArrow[];
+  enforceCheck: boolean; allowCastling: boolean; allowEnPassant: boolean;
+  castlingRights: string; enPassantSquare: string;
 };
 type Board = Record<string, string>;
 type Tool = 'place' | 'move' | 'erase' | 'color' | 'arrow' | 'active' | 'goal' | 'block' | 'protect';
@@ -20,7 +23,7 @@ const codes = ['K', 'Q', 'R', 'B', 'N', 'P', 'k', 'q', 'r', 'b', 'n', 'p'];
 const glyphs: Record<string, string> = { K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙',k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟' };
 const colors: Record<SquareMark,string> = { G:'#219653',R:'#e34c4c',Y:'#e9ad24',B:'#347de0' };
 const storageKey = 'chess-naranco-diagrams-v1';
-const initial: Diagram = { id:'', title:'Nuevo diagrama', description:'', fen:'8/8/8/8/8/8/8/8', active:'', goal:undefined, goalType:'reach', kind:'diagram', blockedSquares:[], showBlockedSquares:true, captureAllowed:[], nonCapturableSquares:[], squareColors:{}, arrows:[] };
+const initial: Diagram = { id:'', title:'Nuevo diagrama', description:'', fen:'8/8/8/8/8/8/8/8', active:'', goal:undefined, goalType:'reach', kind:'diagram', blockedSquares:[], showBlockedSquares:true, captureAllowed:[], nonCapturableSquares:[], squareColors:{}, arrows:[], enforceCheck:false, allowCastling:false, allowEnPassant:false, castlingRights:'', enPassantSquare:'' };
 const makeId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(36).slice(2));
 export function fenToBoard(fen: string): Board {
   const board: Board = {}; const rows = fen.split(' ')[0].split('/');
@@ -66,7 +69,10 @@ const validateDiagram = (value: unknown): Diagram => {
     blockedSquares:Array.isArray(raw.blockedSquares) ? raw.blockedSquares.filter(validateSquare) : [],
     captureAllowed:Array.isArray(raw.captureAllowed) ? raw.captureAllowed.filter(validateSquare) : [],
     nonCapturableSquares:Array.isArray(raw.nonCapturableSquares) ? raw.nonCapturableSquares.filter(validateSquare) : [],
-    squareColors:marks, arrows };
+    squareColors:marks, arrows,
+    enforceCheck:raw.enforceCheck===true, allowCastling:raw.allowCastling===true, allowEnPassant:raw.allowEnPassant===true,
+    castlingRights:typeof raw.castlingRights==='string' ? raw.castlingRights.replace(/[^KQkq]/g,'') : '',
+    enPassantSquare:validateSquare(raw.enPassantSquare)?raw.enPassantSquare:'' };
 };
 const center = (sq: string) => ({ x:(files.indexOf(sq[0]) + .5)*100, y:(8.5-Number(sq[1]))*100 });
 function ArrowOverlay({ arrows }: { arrows: DiagramArrow[] }) {
@@ -164,6 +170,7 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
   const play=()=>{if(!diagram.active||!board[diagram.active]){setMessage('Elige primero la pieza protagonista.');return;}
     if(diagram.kind==='maze'&&!diagram.goal){setMessage('Elige primero la casilla objetivo.');return;}
     if (diagram.kind === 'maze' && diagram.goalType === 'capture' && diagram.goal && !board[diagram.goal]) { setMessage('Para un objetivo de captura, coloca una pieza en la casilla de destino.'); return; }
+    if(diagram.enforceCheck && !Object.values(board).includes(board[diagram.active]==='k'?'k':'K')){setMessage('Para respetar el jaque, coloca el rey del color protagonista.');return;}
     onPlay({...diagram});
   };
   const help: Record<Tool,string> = {
@@ -181,7 +188,7 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
   return <div className="min-h-screen bg-zinc-950 text-zinc-100">
     <header className="border-b border-zinc-800 bg-zinc-900/60"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4">
       <div><p className="text-xs font-semibold uppercase tracking-widest text-emerald-400">Chess-Naranco · Autoría didáctica</p><h1 className="text-xl font-bold">Editor visual de diagramas</h1></div>
-      <div className="flex flex-wrap gap-2"><button className="rounded-lg border border-emerald-500 bg-emerald-900/40 px-3 py-2 text-sm font-semibold text-emerald-100" onClick={openConfig}>⚙ Configuración</button><button className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={onExit}><ArrowLeft size={16} className="inline"/> Inicio</button>
+      <div className="flex flex-wrap gap-2"><button className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={onExit}><ArrowLeft size={16} className="inline"/> Inicio</button>
       <button className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={fresh}><Plus size={16} className="inline"/> Nuevo</button>
       <button className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={()=>fileRef.current?.click()}><Upload size={16} className="inline"/> Importar</button>
       <button className="rounded-lg border border-zinc-700 px-3 py-2 text-sm" onClick={exportJson}><Download size={16} className="inline"/> Exportar JSON</button>
@@ -226,15 +233,31 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
                 <span className="mt-1 block text-xs leading-relaxed text-zinc-400">Las X siempre se ven en el editor. En la prueba, ocultarlas no desactiva el bloqueo.</span></span>
               </label>
             </section>
-            <section className="space-y-2 border-t border-zinc-800 pt-3">
+            <section className="space-y-3 border-t border-zinc-800 pt-3">
               <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-400">Reglas del rey</h3>
-              <label className="flex items-start gap-2 text-xs text-zinc-500"><input type="checkbox" disabled className="mt-0.5"/> Respetar el jaque (pendiente de implementar)</label>
-              <label className="flex items-start gap-2 text-xs text-zinc-500"><input type="checkbox" disabled className="mt-0.5"/> Permitir el enroque (pendiente de implementar)</label>
+              <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-200">
+                <input type="checkbox" className="mt-1 accent-emerald-500" checked={diagram.enforceCheck} onChange={e=>update({...diagram,enforceCheck:e.target.checked})}/>
+                <span><strong>Respetar las reglas del jaque</strong><span className="block text-xs text-zinc-400">Impide que el rey quede en jaque o junto al rey contrario. Necesita un rey del color protagonista.</span></span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-200">
+                <input type="checkbox" className="mt-1 accent-emerald-500" checked={diagram.allowCastling} onChange={e=>update({...diagram,allowCastling:e.target.checked,castlingRights:e.target.checked?availableCastlingRights(board):''})}/>
+                <span><strong>Permitir el enroque</strong><span className="block text-xs text-zinc-400">Solo entre rey y torre en sus casillas originales. Al activarlo se supone que todavía no se han movido; el derecho se pierde tras moverlos.</span></span>
+              </label>
+              {diagram.allowCastling && <div className="rounded-lg bg-zinc-900 p-2 text-xs text-zinc-400">Enroques habilitados: {diagram.castlingRights || 'ninguno (coloca rey y torre y vuelve a activar la opción)'}</div>}
             </section>
-            <section className="space-y-2 border-t border-zinc-800 pt-3">
+            <section className="space-y-3 border-t border-zinc-800 pt-3">
               <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-400">Reglas de los peones</h3>
-              <label className="flex items-start gap-2 text-xs text-zinc-500"><input type="checkbox" disabled className="mt-0.5"/> Permitir la captura al paso (pendiente de implementar)</label>
-              <p className="text-xs leading-relaxed text-zinc-500">Las reglas especiales se habilitarán cuando se haya probado su validación. Los diagramas sin reyes siguen permitidos.</p>
+              <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-200">
+                <input type="checkbox" className="mt-1 accent-emerald-500" checked={diagram.allowEnPassant} onChange={e=>update({...diagram,allowEnPassant:e.target.checked,enPassantSquare:e.target.checked?diagram.enPassantSquare:''})}/>
+                <span><strong>Permitir la captura al paso</strong><span className="block text-xs text-zinc-400">Solo se permite cuando existe un peón rival junto al protagonista y una casilla de captura válida.</span></span>
+              </label>
+              {diagram.allowEnPassant && <label className="block text-xs text-zinc-400">Casilla disponible para la captura al paso
+                <select className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100" value={diagram.enPassantSquare} onChange={e=>update({...diagram,enPassantSquare:e.target.value})}>
+                  <option value="">Ninguna (esperar un avance doble)</option>
+                  {possibleEpTargets(board,diagram.active).map(s=><option key={s} value={s}>{s}</option>)}
+                </select>
+                <span className="mt-1 block text-zinc-500">Para iniciar el ejercicio con el derecho ya disponible, selecciona la casilla. Se consume después del siguiente movimiento.</span>
+              </label>}
             </section>
           </div>
         </details>
