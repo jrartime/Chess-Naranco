@@ -6,7 +6,7 @@ import { ArrowLeft, RotateCcw, Lightbulb, Target, GraduationCap } from 'lucide-r
 
 type Piece = string;
 type Board = Record<string, Piece>;
-type Lesson = { id: string; title: string; description: string; fen: string; active: string; goal?: string; kind: 'diagram' | 'maze'; goalType?: 'reach' | 'capture'; blockedSquares?: string[]; showBlockedSquares?: boolean; captureAllowed?: string[]; squareColors?: Diagram['squareColors']; arrows?: Diagram['arrows'] };
+type Lesson = { id: string; title: string; description: string; fen: string; active: string; goal?: string; kind: 'diagram' | 'maze'; goalType?: 'reach' | 'capture'; blockedSquares?: string[]; showBlockedSquares?: boolean; captureAllowed?: string[]; nonCapturableSquares?: string[]; squareColors?: Diagram['squareColors']; arrows?: Diagram['arrows'] };
 
 const lessons: Lesson[] = [
   {
@@ -181,10 +181,11 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
   const displayFen = useMemo(() => boardToFen(board), [board]);
   const movableSquares = useMemo(() => squares.filter((sq) => {
     if (crossesBlockedSquare(board, active, sq, lesson.blockedSquares || [])) return false;
+    if (board[sq] && (lesson.nonCapturableSquares || []).includes(sq)) return false;
     if (lesson.kind === 'maze' && board[sq] && sq !== lesson.goal && !(lesson.captureAllowed || []).includes(sq)) return false;
     if (board[sq] && (lesson.captureAllowed || []).includes(sq)) return checkMove(board, active, sq).ok;
     return checkMove(board, active, sq).ok;
-  }), [active, board, lesson.goal, lesson.kind]);
+  }), [active, board, lesson.goal, lesson.kind, lesson.nonCapturableSquares, lesson.captureAllowed, lesson.blockedSquares]);
 
   const squareHighlights = useMemo(() => {
     const styles: Record<string, React.CSSProperties> = {};
@@ -200,12 +201,15 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
         styles[square] = { ...styles[square], boxShadow: 'inset 0 0 0 3px rgba(20, 110, 58, 0.28)' };
       }
     }
+    for (const square of lesson.nonCapturableSquares || []) {
+      styles[square] = { ...styles[square], boxShadow: 'inset 0 0 0 4px #a78bfa' };
+    }
     if (lesson.goal && !done) {
       styles[lesson.goal] = { ...styles[lesson.goal], boxShadow: 'inset 0 0 0 4px rgba(245, 158, 11, 0.95)' };
     }
     styles[active] = { ...styles[active], backgroundColor: '#bed868' };
     return styles;
-  }, [active, done, hint, lesson.goal, lesson.squareColors, lesson.showBlockedSquares, lesson.blockedSquares, movableSquares, trail]);
+  }, [active, done, hint, lesson.goal, lesson.squareColors, lesson.showBlockedSquares, lesson.blockedSquares, lesson.nonCapturableSquares, movableSquares, trail]);
   const switchLesson = (id: string) => {
     const selected = availableLessons.find((item) => item.id === id) || availableLessons[0];
     setLessonId(selected.id);
@@ -236,6 +240,10 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
       setFeedback(check.explanation);
       setFeedbackKind('error');
       return;
+    }
+    if (board[destination] && (lesson.nonCapturableSquares || []).includes(destination)) {
+      setFeedback('Esa pieza está protegida y no se puede capturar. Busca otro movimiento.');
+      setFeedbackKind('error');return;
     }
     if (lesson.kind === 'maze' && board[destination] && destination !== lesson.goal && !(lesson.captureAllowed || []).includes(destination)) {
       setFeedback('En este laberinto, esa pieza es un obstáculo que no puedes capturar. Debes rodearla.');
