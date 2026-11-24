@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Diagram } from './DiagramEditor';
 import { Chessboard } from 'react-chessboard';
 import BlockedSquaresOverlay from './BlockedSquaresOverlay';
+import { validateDidacticMove } from './didacticSpecialRules';
 import { ArrowLeft, RotateCcw, Lightbulb, Target, GraduationCap } from 'lucide-react';
 
 type Piece = string;
 type Board = Record<string, Piece>;
-type Lesson = { id: string; title: string; description: string; fen: string; active: string; goal?: string; kind: 'diagram' | 'maze'; goalType?: 'reach' | 'capture'; blockedSquares?: string[]; showBlockedSquares?: boolean; captureAllowed?: string[]; nonCapturableSquares?: string[]; squareColors?: Diagram['squareColors']; arrows?: Diagram['arrows'] };
+type Lesson = { id: string; title: string; description: string; fen: string; active: string; goal?: string; kind: 'diagram' | 'maze'; goalType?: 'reach' | 'capture'; blockedSquares?: string[]; showBlockedSquares?: boolean; captureAllowed?: string[]; nonCapturableSquares?: string[]; enforceCheck?: boolean; allowCastling?: boolean; allowEnPassant?: boolean; castlingRights?: string; enPassantSquare?: string; squareColors?: Diagram['squareColors']; arrows?: Diagram['arrows'] };
 
 const lessons: Lesson[] = [
   {
@@ -162,6 +163,8 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
   const [board, setBoard] = useState<Board>(() => parseFenPlacement(initialLesson?.fen || lessons[0].fen));
   const [active, setActive] = useState(initialLesson?.active || lessons[0].active);
   const [numberOfMoves, setNumberOfMoves] = useState(0);
+  const [castlingRights,setCastlingRights]=useState(initialLesson?.castlingRights||'');
+  const [enPassantSquare,setEnPassantSquare]=useState(initialLesson?.enPassantSquare||'');
   const [feedback, setFeedback] = useState('Pulsa una casilla para mover la pieza protagonista.');
   const [feedbackKind, setFeedbackKind] = useState<'neutral' | 'error' | 'success'>('neutral');
   const [hint, setHint] = useState(false);
@@ -179,13 +182,14 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
     return () => observer.disconnect();
   }, []);
   const displayFen = useMemo(() => boardToFen(board), [board]);
-  const movableSquares = useMemo(() => squares.filter((sq) => {
-    if (crossesBlockedSquare(board, active, sq, lesson.blockedSquares || [])) return false;
-    if (board[sq] && (lesson.nonCapturableSquares || []).includes(sq)) return false;
-    if (lesson.kind === 'maze' && board[sq] && sq !== lesson.goal && !(lesson.captureAllowed || []).includes(sq)) return false;
-    if (board[sq] && (lesson.captureAllowed || []).includes(sq)) return checkMove(board, active, sq).ok;
-    return checkMove(board, active, sq).ok;
-  }), [active, board, lesson.goal, lesson.kind, lesson.nonCapturableSquares, lesson.captureAllowed, lesson.blockedSquares]);
+  const checkDestination = (destination: string) => validateDidacticMove(board,active,destination,{
+    kind:lesson.kind,goal:lesson.goal,
+    blockedSquares:lesson.blockedSquares,nonCapturableSquares:lesson.nonCapturableSquares,
+    captureAllowed:lesson.captureAllowed,enforceCheck:lesson.enforceCheck,
+    allowCastling:lesson.allowCastling,castlingRights,
+    allowEnPassant:lesson.allowEnPassant,enPassantSquare,
+  });
+  const movableSquares = squares.filter(sq => checkDestination(sq).ok);
 
   const squareHighlights = useMemo(() => {
     const styles: Record<string, React.CSSProperties> = {};
@@ -216,6 +220,8 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
     setBoard(parseFenPlacement(selected.fen));
     setActive(selected.active);
     setNumberOfMoves(0);
+    setCastlingRights(selected.castlingRights||'');
+    setEnPassantSquare(selected.enPassantSquare||'');
     setTrail([]);
     setHint(false);
     setDone(false);
@@ -232,30 +238,13 @@ export default function DidacticBoard({ onExit, initialLesson }: { onExit: () =>
       setFeedbackKind('neutral');
       return;
     }
-    if (crossesBlockedSquare(board, active, destination, lesson.blockedSquares || [])) {
-      setFeedback('Hay una casilla bloqueada en el recorrido o en el destino. Debes evitarla.');setFeedbackKind('error');return;
+    const result=checkDestination(destination);
+    if(!result.ok){
+      setFeedback(result.explanation);setFeedbackKind('error');return;
     }
-    const check = checkMove(board, active, destination);
-    if (!check.ok) {
-      setFeedback(check.explanation);
-      setFeedbackKind('error');
-      return;
-    }
-    if (board[destination] && (lesson.nonCapturableSquares || []).includes(destination)) {
-      setFeedback('Esa pieza está protegida y no se puede capturar. Busca otro movimiento.');
-      setFeedbackKind('error');return;
-    }
-    if (lesson.kind === 'maze' && board[destination] && destination !== lesson.goal && !(lesson.captureAllowed || []).includes(destination)) {
-      setFeedback('En este laberinto, esa pieza es un obstáculo que no puedes capturar. Debes rodearla.');
-      setFeedbackKind('error');
-      return;
-    }
-    if (lesson.goal && destination === lesson.goal && lesson.goalType === 'capture' && !board[destination]) {
-      setFeedback('Debes capturar una pieza en la casilla objetivo.');setFeedbackKind('error');return;
-    }
-    const next = { ...board };
-    delete next[active];
-    next[destination] = piece;
+    const next=result.next!;
+    setCastlingRights(result.castlingRights||'');
+    setEnPassantSquare(result.enPassantSquare||'');
     setBoard(next);
     setTrail((values) => [...values, active]);
     setActive(destination);
