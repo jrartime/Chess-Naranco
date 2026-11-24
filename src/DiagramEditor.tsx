@@ -209,10 +209,32 @@ export default function DiagramEditor({ onExit, onPlay, initialDiagram }: { onEx
         <label className="block text-xs text-zinc-400">Instrucciones<textarea rows={4} className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100" value={diagram.description} onChange={e=>setDiagram(old=>({...old,description:e.target.value}))}/></label>
         <label className="block text-xs text-zinc-400">Tipo<select className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100" value={diagram.kind} onChange={e=>setDiagram(old=>({...old,kind:e.target.value as Diagram['kind']}))}><option value="diagram">Diagrama de movimientos</option><option value="maze">Reto / laberinto</option></select></label>
         <label className="block text-xs text-zinc-400">Objetivo<select className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-100" value={diagram.goalType} onChange={e=>setDiagram(old=>({...old,goalType:e.target.value as Diagram['goalType']}))}><option value="reach">Alcanzar casilla</option><option value="capture">Capturar pieza</option></select></label>
-        <label className="flex items-start gap-3 rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-sm text-zinc-200">
-          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-500" checked={diagram.showBlockedSquares} onChange={e=>setDiagram(old=>({...old,showBlockedSquares:e.target.checked}))}/>
-          <span><strong>Mostrar casillas bloqueadas al alumnado</strong><span className="mt-1 block text-xs leading-relaxed text-zinc-400">En el editor siempre se identifican con una X. Si desactivas esta opción, en «Probar ejercicio» estarán ocultas, pero seguirán prohibidas y se explicará el error al intentar ocuparlas o atravesarlas.</span></span>
-        </label>
+        <details className="group rounded-xl border border-zinc-700 bg-zinc-950">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-sm font-semibold text-zinc-100">
+            <span>⚙ Configuración del ejercicio</span>
+            <span aria-hidden="true" className="text-zinc-400 transition-transform group-open:rotate-180">⌄</span>
+          </summary>
+          <div className="space-y-4 border-t border-zinc-700 px-3 py-4">
+            <section className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-400">Presentación</h3>
+              <label className="flex cursor-pointer items-start gap-3 text-sm text-zinc-200">
+                <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-500" checked={diagram.showBlockedSquares} onChange={e=>setDiagram(old=>({...old,showBlockedSquares:e.target.checked}))}/>
+                <span><strong>Mostrar casillas bloqueadas al alumnado</strong>
+                <span className="mt-1 block text-xs leading-relaxed text-zinc-400">Las X siempre se ven en el editor. En la prueba, ocultarlas no desactiva el bloqueo.</span></span>
+              </label>
+            </section>
+            <section className="space-y-2 border-t border-zinc-800 pt-3">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-400">Reglas del rey</h3>
+              <label className="flex items-start gap-2 text-xs text-zinc-500"><input type="checkbox" disabled className="mt-0.5"/> Respetar el jaque (pendiente de implementar)</label>
+              <label className="flex items-start gap-2 text-xs text-zinc-500"><input type="checkbox" disabled className="mt-0.5"/> Permitir el enroque (pendiente de implementar)</label>
+            </section>
+            <section className="space-y-2 border-t border-zinc-800 pt-3">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-400">Reglas de los peones</h3>
+              <label className="flex items-start gap-2 text-xs text-zinc-500"><input type="checkbox" disabled className="mt-0.5"/> Permitir la captura al paso (pendiente de implementar)</label>
+              <p className="text-xs leading-relaxed text-zinc-500">Las reglas especiales se habilitarán cuando se haya probado su validación. Los diagramas sin reyes siguen permitidos.</p>
+            </section>
+          </div>
+        </details>
         <div className="rounded-lg bg-zinc-950 p-3 text-xs text-zinc-300"><p>Protagonista: <strong>{diagram.active||'sin asignar'}</strong></p><p>Destino: <strong>{diagram.goal||'sin asignar'}</strong></p><p>Casillas bloqueadas: {diagram.blockedSquares.length} · Piezas no capturables: {diagram.nonCapturableSquares.length}</p></div>
         <button onClick={play} className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-3 py-3 text-sm font-bold hover:bg-orange-700"><Play size={17}/> Probar ejercicio</button>
         <div className="border-t border-zinc-700 pt-3"><h3 className="mb-2 text-sm font-semibold">Mis diagramas ({saved.length})</h3>
